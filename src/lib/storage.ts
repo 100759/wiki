@@ -117,6 +117,9 @@ export class LocalFileStore implements ContentStore {
   private readonly metaFile: string;
   private readonly historyDir: string;
   private readonly uploadsDir: string;
+  /** 数据目录是否可写；null = 尚未探测。只读部署下降级，不抛错。 */
+  private writable: boolean | null = null;
+  private bundledCache: Map<string, string> | null = null;
 
   constructor(root: string = defaultDataDir()) {
     this.root = root;
@@ -126,12 +129,33 @@ export class LocalFileStore implements ContentStore {
     this.uploadsDir = path.join(root, "uploads");
   }
 
-  private async ensureDirs(): Promise<void> {
-    await Promise.all([
-      fs.mkdir(this.contentDir, { recursive: true }),
-      fs.mkdir(this.historyDir, { recursive: true }),
-      fs.mkdir(this.uploadsDir, { recursive: true }),
-    ]);
+  /** 只探测一次：失败即进入只读模式，任何读写都不得因此抛 500。 */
+  private async ensureDirs(): Promise<boolean> {
+    if (this.writable !== null) return this.writable;
+    try {
+      await Promise.all([
+        fs.mkdir(this.contentDir, { recursive: true }),
+        fs.mkdir(this.historyDir, { recursive: true }),
+        fs.mkdir(this.uploadsDir, { recursive: true }),
+      ]);
+      this.writable = true;
+    } catch {
+      this.writable = false;
+    }
+    return this.writable;
+  }
+
+  /** 构建期打包进产物的 content/ 快照；只读部署的首屏数据源。 */
+  private async bundledPages(): Promise<Map<string, string>> {
+    if (this.bundledCache) return this.bundledCache;
+    try {
+      const { getBundledPages } = await import("./bundled");
+      const pages = await getBundledPages();
+      this.bundledCache = new Map(pages.map((page) => [page.path, page.markdown]));
+    } catch {
+      this.bundledCache = new Map();
+    }
+    return this.bundledCache;
   }
 
   private fileFor(contentPath: string): string {
@@ -195,28 +219,70 @@ export class LocalFileStore implements ContentStore {
     return found;
   }
 
-  /** 索引缺失或落后于磁盘时，以磁盘为准补齐。 */
+  private bundledMeta(contentPath: string, markdown: string): PageMeta {
+    return {
+      id: pageId(contentPath),
+      path: contentPath,
+      title: guessTitle(contentPath, markdown),
+      sha: sha1(markdown),
+      updatedAt: new Date(0).toISOString(),
+      updatedBy: "seed",
+      acl: [...DEFAULT_ACL],
+      order: 100,
+      parent: parentOf(contentPath),
+    };
+  }
+
+  /** 索引缺失或落后于磁盘时，以磁盘为准补齐；无磁盘时用构建期打包内容兜底。 */
   private async loadIndex(): Promise<MetaFile> {
-    await this.ensureDirs();
+    const writable = await this.ensureDirs();
     const meta = await this.readMetaFile();
+    const bundled = await this.bundledPages();
     const scanned = await this.scanMarkdown();
-    const byPath = new Map(meta.pages.map((p) => [p.path, p]));
-    let changed = meta.pages.length === 0;
+    const diskPaths = new Set(scanned.map((page) => page.path));
+    const byPath = new Map(meta.pages.map((page) => [page.path, page]));
+    let changed = false;
+
+    // 打包内容作为基线；磁盘上已有同路径时以磁盘为准。
+    for (const [contentPath, markdown] of bundled) {
+      if (diskPaths.has(contentPath)) continue;
+      const known = byPath.get(contentPath);
+      const sha = sha1(markdown);
+      if (!known) {
+        const entry = this.bundledMeta(contentPath, markdown);
+        meta.pages.push(entry);
+        byPath.set(contentPath, entry);
+        changed = true;
+      } else if (known.sha !== sha) {
+        known.sha = sha;
+        changed = true;
+      }
+    }
+
     for (const page of scanned) {
       const known = byPath.get(page.path);
       if (!known) {
         meta.pages.push(page);
+        byPath.set(page.path, page);
         changed = true;
       } else if (known.sha !== page.sha) {
         known.sha = page.sha;
         changed = true;
       }
     }
-    const existing = new Set(scanned.map((p) => p.path));
-    const pruned = meta.pages.filter((p) => existing.has(p.path));
+
+    const allowed = new Set([...bundled.keys(), ...diskPaths]);
+    const pruned = meta.pages.filter((page) => allowed.has(page.path));
     if (pruned.length !== meta.pages.length) changed = true;
     meta.pages = pruned;
-    if (changed) await this.writeMetaFile(meta);
+
+    if (changed && writable) {
+      try {
+        await this.writeMetaFile(meta);
+      } catch {
+        // 只读兜底：索引写不进去也不影响本次读取。
+      }
+    }
     return meta;
   }
 
@@ -227,11 +293,23 @@ export class LocalFileStore implements ContentStore {
     } catch {
       return null;
     }
-    const meta = await this.loadIndex();
-    const entry = meta.pages.find((p) => p.path === contentPath);
-    if (!entry) return null;
+
     try {
-      const markdown = await fs.readFile(this.fileFor(contentPath), "utf8");
+      const meta = await this.loadIndex();
+      const bundled = await this.bundledPages();
+      let entry = meta.pages.find((page) => page.path === contentPath);
+      let markdown: string | null = null;
+
+      try {
+        markdown = await fs.readFile(this.fileFor(contentPath), "utf8");
+      } catch {
+        markdown = bundled.get(contentPath) ?? null;
+      }
+      if (markdown === null) return null;
+
+      if (!entry) {
+        entry = this.bundledMeta(contentPath, markdown);
+      }
       return { ...entry, markdown };
     } catch {
       return null;
@@ -239,17 +317,25 @@ export class LocalFileStore implements ContentStore {
   }
 
   async getPageById(id: string): Promise<PageRecord | null> {
-    const meta = await this.loadIndex();
-    const entry = meta.pages.find((p) => p.id === id);
-    if (!entry) return null;
-    return this.getPageByPath(entry.path);
+    try {
+      const meta = await this.loadIndex();
+      const entry = meta.pages.find((page) => page.id === id);
+      if (!entry) return null;
+      return this.getPageByPath(entry.path);
+    } catch {
+      return null;
+    }
   }
 
   async listPages(): Promise<PageSummary[]> {
-    const meta = await this.loadIndex();
-    return meta.pages
-      .map(({ id, path: p, title, order, parent, acl }) => ({ id, path: p, title, order, parent, acl }))
-      .sort((a, b) => a.order - b.order || a.title.localeCompare(b.title, "zh-Hans-CN"));
+    try {
+      const meta = await this.loadIndex();
+      return meta.pages
+        .map(({ id, path: p, title, order, parent, acl }) => ({ id, path: p, title, order, parent, acl }))
+        .sort((a, b) => a.order - b.order || a.title.localeCompare(b.title, "zh-Hans-CN"));
+    } catch {
+      return [];
+    }
   }
 
   /**
@@ -260,6 +346,15 @@ export class LocalFileStore implements ContentStore {
    * 前端只看到同一份 SaveResult.conflict 语义，不感知重试。
    */
   async savePage(input: SaveInput): Promise<SaveResult> {
+    try {
+      return await this.savePageImpl(input);
+    } catch (err) {
+      // 存储异常不得传染成 500；前端按可重试失败处理。
+      return { ok: false, code: "invalid", message: `存储异常：${(err as Error).message}` };
+    }
+  }
+
+  private async savePageImpl(input: SaveInput): Promise<SaveResult> {
     if (input.actor.role === "viewer") {
       return { ok: false, code: "forbidden", message: "viewer 角色没有保存权限" };
     }
@@ -274,12 +369,21 @@ export class LocalFileStore implements ContentStore {
       return { ok: false, code: "invalid", message: "title / markdown 必须是字符串" };
     }
 
-    await this.ensureDirs();
+    // 只读部署（EdgeOne /var/user 只读）：不抛错，返回可读失败原因。
+    if (!(await this.ensureDirs())) {
+      return {
+        ok: false,
+        code: "invalid",
+        message: "当前部署为只读存储，保存需在 M2 接入 Blob/GitHub",
+      };
+    }
+
     const meta = await this.loadIndex();
     const id = pageId(contentPath);
     const existingFile = await this.readExisting(contentPath);
     const current = meta.pages.find((p) => p.path === contentPath);
-    const currentSha = existingFile === null ? null : current?.sha ?? sha1(existingFile);
+    // 打包内容也参与并发基线：磁盘没有该页时以索引里的 sha 为准。
+    const currentSha = existingFile !== null ? current?.sha ?? sha1(existingFile) : current?.sha ?? null;
 
     // 乐观并发：客户端必须带它读到的 sha（新页面为 null）。
     if ((input.baseSha ?? null) !== currentSha) {

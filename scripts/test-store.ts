@@ -17,6 +17,7 @@ function check(name: string, condition: boolean, detail = ""): void {
 
 const editor = { uid: "u-editor", name: "编辑者", role: "editor" as const };
 const viewer = { uid: "u-viewer", name: "读者", role: "viewer" as const };
+const admin = { uid: "u-admin", name: "管理员", role: "admin" as const };
 
 async function main() {
   await fs.rm(root, { recursive: true, force: true });
@@ -115,6 +116,33 @@ async function main() {
     actor: editor,
   });
   check("路径穿越被拒绝", !bad.ok && bad.code === "invalid");
+
+  // 只读兜底：数据目录不可写时，读返回空、写返回失败，但都不抛错。
+  const roParent = path.join(root, "readonly");
+  await fs.mkdir(roParent, { recursive: true });
+  await fs.chmod(roParent, 0o555);
+  const roStore = new LocalFileStore(path.join(roParent, "data"));
+  let roThrew = false;
+  try {
+    const roPages = await roStore.listPages();
+    const roPage = await roStore.getPageByPath("content/index.md");
+    const roSave = await roStore.savePage({
+      path: "content/ro.md",
+      title: "只读",
+      markdown: "只读",
+      baseSha: null,
+      images: [],
+      actor: admin,
+    });
+    check("只读模式列表为空但不抛错", Array.isArray(roPages) && roPages.length === 0);
+    check("只读模式读页返回 null", roPage === null);
+    check("只读模式保存返回 invalid 而非抛错", !roSave.ok && roSave.code === "invalid", JSON.stringify(roSave));
+  } catch (err) {
+    roThrew = true;
+    console.error(err);
+  }
+  check("只读模式全程无异常", !roThrew);
+  await fs.chmod(roParent, 0o755);
 
   await fs.rm(root, { recursive: true, force: true });
 
