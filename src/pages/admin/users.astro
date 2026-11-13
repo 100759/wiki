@@ -66,7 +66,7 @@ const users = await getUserRepository().load();
           name="name"
           placeholder="名字（登录用）"
           required
-          class="min-w-40 flex-1 border border-hairline px-3 py-2 text-ink outline-none focus:border-ink"
+          class="min-w-40 flex-1 border-0 border-b border-hairline bg-transparent px-0 py-2 text-ink outline-none focus:border-ink"
         />
         <input
           name="password"
@@ -74,7 +74,7 @@ const users = await getUserRepository().load();
           placeholder="初始口令（至少 8 位）"
           minlength="8"
           required
-          class="min-w-40 flex-1 border border-hairline px-3 py-2 text-ink outline-none focus:border-ink"
+          class="min-w-40 flex-1 border-0 border-b border-hairline bg-transparent px-0 py-2 text-ink outline-none focus:border-ink"
         />
         <select name="role" class="rounded-md border border-stone-300 px-2 py-2">
           <option value="editor">editor</option>
