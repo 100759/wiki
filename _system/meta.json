@@ -20,16 +20,6 @@
       ],
       "updatedAt": "2026-11-13T09:23:39.075Z",
       "updatedBy": "admin"
-    },
-    "content/_branchtest.md": {
-      "title": "分支自检",
-      "order": 100,
-      "acl": [
-        "admin",
-        "editor"
-      ],
-      "updatedAt": "2026-11-13T10:04:01.552Z",
-      "updatedBy": "admin"
     }
   }
 }
