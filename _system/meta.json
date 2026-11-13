@@ -10,6 +10,16 @@
       ],
       "updatedAt": "2026-11-13T08:22:32.238Z",
       "updatedBy": "并发自检"
+    },
+    "content/_race-b.md": {
+      "title": "并发 B",
+      "order": 100,
+      "acl": [
+        "admin",
+        "editor"
+      ],
+      "updatedAt": "2026-11-13T08:22:32.740Z",
+      "updatedBy": "并发自检"
     }
   }
 }
