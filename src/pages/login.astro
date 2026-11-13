@@ -1,0 +1,85 @@
+---
+import Base from "../layouts/Base.astro";
+import { getSession } from "../lib/session";
+
+export const prerender = false;
+
+if (getSession(Astro.cookies)) {
+  return Astro.redirect("/");
+}
+
+const next = Astro.url.searchParams.get("next") ?? "/";
+const safeNext = next.startsWith("/") && !next.startsWith("//") ? next : "/";
+---
+
+<Base title="登录">
+  <div class="mx-auto max-w-sm">
+    <h1 class="text-xl font-bold">登录</h1>
+    <p class="mt-1 text-sm text-stone-500">用管理员发给你的用户名和口令登录，登录后才能编辑与保存。</p>
+
+    <form id="login-form" class="mt-6 space-y-4 rounded-lg border border-stone-200 bg-white p-5">
+      <label class="block text-sm">
+        <span class="text-stone-600">用户名</span>
+        <input
+          name="name"
+          autocomplete="username"
+          required
+          class="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 outline-none focus:border-ink"
+        />
+      </label>
+      <label class="block text-sm">
+        <span class="text-stone-600">口令</span>
+        <input
+          name="password"
+          type="password"
+          autocomplete="current-password"
+          required
+          minlength="8"
+          class="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 outline-none focus:border-ink"
+        />
+      </label>
+      <p id="login-error" class="hidden rounded-md bg-red-50 px-3 py-2 text-sm text-red-700"></p>
+      <button
+        type="submit"
+        class="w-full rounded-md bg-ink px-3 py-2 text-sm text-white hover:bg-black disabled:opacity-60"
+      >
+        登录
+      </button>
+    </form>
+
+    <p class="mt-4 text-xs text-stone-400">
+      忘记口令请让管理员重置。连续输错 5 次会锁定 15 分钟。
+    </p>
+  </div>
+
+  <script define:vars={{ safeNext }} is:inline>
+    const form = document.getElementById("login-form");
+    const errorBox = document.getElementById("login-error");
+    form?.addEventListener("submit", async function (event) {
+      event.preventDefault();
+      errorBox.classList.add("hidden");
+      const button = form.querySelector("button[type=submit]");
+      button.disabled = true;
+      const data = new FormData(form);
+      try {
+        const response = await fetch("/api/login", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name: data.get("name"), password: data.get("password") }),
+        });
+        const payload = await response.json();
+        if (payload.ok) {
+          location.href = safeNext;
+          return;
+        }
+        errorBox.textContent = payload.message || "登录失败";
+        errorBox.classList.remove("hidden");
+      } catch {
+        errorBox.textContent = "网络异常，请稍后再试";
+        errorBox.classList.remove("hidden");
+      } finally {
+        button.disabled = false;
+      }
+    });
+  </script>
+</Base>

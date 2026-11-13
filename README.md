@@ -24,6 +24,39 @@ npm run test:md      # TipTap 中文页 md 往返 + 渲染安全
 npm run test:images  # 图片读取双后端：public 302 / private not_implemented
 ```
 
+## M2：真实鉴权与 GitHub 写入
+
+线上唯一真源是 GitHub 仓库（Blob 在直接上传型项目里拿不到凭据，已弃用）：
+
+| 路径 | 内容 |
+|---|---|
+| `content/**.md` | 正文 |
+| `_system/meta.json` | 标题 / 排序 / ACL / 更新时间 |
+| `_system/users.json` | 用户表，只存 PBKDF2-SHA256（600k 轮）+ 独立 salt |
+| `assets/<pageId>/*` | 正文图片（`/img/<repoPath>` 暴露，public 模式 302 到 raw） |
+
+必需环境变量：
+
+- `GITHUB_REPO=owner/repo`、`GITHUB_BRANCH=main`
+- `GITHUB_TOKEN`：细粒度 PAT，权限 **Contents: Read and write**（只读 token 会在创建 blob 时 403）
+- `JWT_SECRET`：≥16 字符，签名会话 Cookie；缺失时登录直接拒绝（不会降级成可伪造身份）
+- `WIKI_BOOTSTRAP_PASSWORD`：首次部署引导管理员口令；用户表为空时用它登录 `admin`，成功后写入 `_system/users.json`
+- `IMAGE_MODE=public|private`（private 仍需只读代理，未实现时明确 501，不降级）
+- 可选 `GITHUB_PROXY`：仅本地调试走代理，线上直连
+
+保存链路：一次 `commitFiles` 递交正文 + meta + 图片，`base_tree` 为当前 head，ref 更新失败（422）时按"重取 head → 重试最多 3 次 → 比对目标文件 blob sha"判定是同行冲突还是别人改了别的页。并发冲突返回 409，前端提示刷新。
+
+首次部署流程：
+
+```bash
+npm run build
+edgeone makers deploy -n wiki-site -t $EDGEONE_API_TOKEN --site china
+# 控制台设置环境变量后，用 admin + WIKI_BOOTSTRAP_PASSWORD 登录一次
+npm run user:add   # 需要 WIKI_USER_NAME / WIKI_USER_PASSWORD / WIKI_USER_ROLE
+```
+
+自测：`npm run test:m2`（30 项，内存假 GitHub，不碰真仓库）。
+
 ## 线上部署（EdgeOne Makers）
 
 ```bash

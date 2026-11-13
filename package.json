@@ -8,7 +8,9 @@
     "test:store": "tsx scripts/test-store.ts",
     "test:md": "tsx scripts/test-md.ts",
     "seed": "tsx scripts/seed.ts",
-    "test:images": "tsx scripts/test-images.ts"
+    "test:images": "tsx scripts/test-images.ts",
+    "test:m2": "tsx scripts/test-m2.ts",
+    "user:add": "tsx scripts/add-user.ts"
   },
   "type": "module",
   "private": "true",

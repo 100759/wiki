@@ -25,6 +25,11 @@ interface SaveBody {
 export const POST: APIRoute = async ({ request, cookies }) => {
   const actor = getSession(cookies);
 
+  // F 验收：没有有效签名会话一律 401，不接受任何可伪造的角色 Cookie。
+  if (!actor) {
+    return json({ ok: false, code: "unauthorized", message: "请先登录" }, 401);
+  }
+
   // D 验收：viewer 一律 forbidden。
   if (actor.role === "viewer") {
     return json({ ok: false, code: "forbidden", message: "viewer 角色没有保存权限" }, 403);

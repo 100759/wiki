@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
-import { promises as fs } from "node:fs";
+import { promises as fs, readFileSync } from "node:fs";
 import path from "node:path";
+import { GithubClient } from "./github";
+import { GithubStore } from "./gitstore";
 import { guessTitle, normalizeContentPath, pageId } from "./ids";
 
 /* ------------------------------------------------------------------ *
@@ -525,13 +527,57 @@ export class LocalFileStore implements ContentStore {
 }
 
 /* ------------------------------------------------------------------ *
- * 工厂：M2 在这里加分支（githubStore / blobStore），调用方一行不改。
+ * 工厂：有 GitHub 凭据走 githubStore（唯一真源），否则退回 localFileStore。
+ * 调用方一行不改。
  * ------------------------------------------------------------------ */
 let singleton: ContentStore | null = null;
+let clientSingleton: GithubClient | null = null;
+
+const VAULT_TOKEN_PATH =
+  "/Users/fuheng/Library/Application Support/OpenBot/agent-api-keys/.vault/GITHUB_WIKI_TOKEN";
+
+/** 同步取 token：环境变量 → GITHUB_TOKEN_FILE → 本机 Vault 文件（本地调试用）。 */
+function resolveTokenSync(): string {
+  const fromEnv = (process.env.GITHUB_TOKEN ?? "").trim();
+  if (fromEnv) return fromEnv;
+  const candidates = [process.env.GITHUB_TOKEN_FILE ?? "", VAULT_TOKEN_PATH].filter(Boolean);
+  for (const file of candidates) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const raw = readFileSync(file, "utf8").trim();
+      if (raw) return raw;
+    } catch {
+      /* 继续尝试下一个来源 */
+    }
+  }
+  return "";
+}
+
+export function getGithubClient(): GithubClient | null {
+  if (clientSingleton) return clientSingleton;
+  const repo = (process.env.GITHUB_REPO ?? "").trim();
+  const token = resolveTokenSync();
+  if (!repo || !token) return null;
+  clientSingleton = new GithubClient({
+    repo,
+    branch: (process.env.GITHUB_BRANCH ?? "").trim() || "main",
+    token,
+    proxy: (process.env.GITHUB_PROXY ?? "").trim() || null,
+  });
+  return clientSingleton;
+}
 
 export function getStore(): ContentStore {
-  if (!singleton) singleton = new LocalFileStore();
+  if (singleton) return singleton;
+  const client = getGithubClient();
+  singleton = client ? new GithubStore(client) : new LocalFileStore();
   return singleton;
+}
+
+/** 供自测切换实现用。 */
+export function resetStore(): void {
+  singleton = null;
+  clientSingleton = null;
 }
 
 export function createLocalStore(root: string): ContentStore {

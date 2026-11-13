@@ -1,6 +1,6 @@
 ---
 import "../styles/global.css";
-import { getSession, MOCK_USERS, SESSION_COOKIE, isRole } from "../lib/session";
+import { getSession } from "../lib/session";
 
 interface Props {
   title?: string;
@@ -8,9 +8,6 @@ interface Props {
 
 const { title = "共创 Wiki" } = Astro.props;
 const session = getSession(Astro.cookies);
-const cookie = Astro.cookies.get(SESSION_COOKIE)?.value;
-const activeRole = isRole(cookie) ? cookie : "editor";
-const roles = Object.keys(MOCK_USERS) as Array<keyof typeof MOCK_USERS>;
 ---
 
 <!doctype html>
@@ -29,24 +26,29 @@ const roles = Object.keys(MOCK_USERS) as Array<keyof typeof MOCK_USERS>;
         <a href="/edit?path=content/new-page.md" class="text-sm text-stone-600 hover:text-ink">新建页面</a>
 
         <div class="ml-auto flex items-center gap-2 text-xs text-stone-500">
-          <span>M1 本地演示 · 当前身份</span>
-          <div class="flex overflow-hidden rounded-md border border-stone-300">
-            {
-              (roles).map((role) => (
+          {
+            session ? (
+              <>
+                <span>
+                  {session.name}
+                  <span class="ml-1 rounded bg-stone-100 px-1.5 py-0.5 text-[11px] text-stone-500">
+                    {session.role}
+                  </span>
+                </span>
                 <button
                   type="button"
-                  data-role={role}
-                  class:list={[
-                    "px-2 py-1 transition-colors",
-                    activeRole === role ? "bg-ink text-white" : "bg-white text-stone-600 hover:bg-stone-100",
-                  ]}
-                  title={`切换到 ${MOCK_USERS[role].name}（${role}）`}
+                  id="logout"
+                  class="rounded-md border border-stone-300 px-2 py-1 text-stone-600 hover:bg-stone-100"
                 >
-                  {MOCK_USERS[role].name}
+                  退出
                 </button>
-              ))
-            }
-          </div>
+              </>
+            ) : (
+              <a href="/login" class="rounded-md border border-stone-300 px-2 py-1 text-stone-600 hover:bg-stone-100">
+                登录
+              </a>
+            )
+          }
         </div>
       </div>
     </header>
@@ -56,16 +58,18 @@ const roles = Object.keys(MOCK_USERS) as Array<keyof typeof MOCK_USERS>;
     </main>
 
     <footer class="mx-auto max-w-5xl px-4 pb-10 pt-4 text-xs text-stone-400">
-      工部 M1 骨架 · 数据存于本地 ./data · 未接 GitHub / EdgeOne
+      读者免登录阅读 · 保存需登录 · 正文与历史都存在 GitHub 仓库
     </footer>
 
-    <script is:inline>
-      document.querySelectorAll("[data-role]").forEach(function (el) {
-        el.addEventListener("click", function () {
-          document.cookie = "mock_role=" + el.dataset.role + "; path=/; max-age=604800; SameSite=Lax";
-          location.reload();
-        });
-      });
-    </script>
+    {
+      session && (
+        <script is:inline>
+          document.getElementById("logout")?.addEventListener("click", async function () {
+            await fetch("/api/logout", { method: "POST" });
+            location.href = "/";
+          });
+        </script>
+      )
+    }
   </body>
 </html>

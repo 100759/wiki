@@ -1,7 +1,7 @@
 ---
 import Base from "../layouts/Base.astro";
 import Editor from "../components/editor/Editor";
-import { normalizeContentPath, pageId } from "../lib/ids";
+import { normalizeContentPath, pageId, pathToSlug } from "../lib/ids";
 import { getSession } from "../lib/session";
 import { getStore } from "../lib/storage";
 
@@ -16,8 +16,15 @@ try {
 }
 
 const store = getStore();
-const found = await store.getPageByPath(contentPath);
 const session = getSession(Astro.cookies);
+if (!session) {
+  return Astro.redirect(`/login?next=${encodeURIComponent(Astro.url.pathname + Astro.url.search)}`);
+}
+if (session.role === "viewer") {
+  return Astro.redirect(`/w/${pathToSlug(contentPath)}`);
+}
+
+const found = await store.getPageByPath(contentPath);
 
 const page = found ?? {
   id: pageId(contentPath),

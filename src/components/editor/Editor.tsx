@@ -251,6 +251,36 @@ export default function Editor({ initial, user, history }: Props) {
     }
   }, [editor, initial.path, initial.sha, readOnly, title]);
 
+  const revertTo = useCallback(
+    async (sha: string) => {
+      if (!window.confirm("确定把这一页恢复到这个版本？这会生成一次新的提交，旧版本仍保留在历史里。")) {
+        return;
+      }
+      setSaving(true);
+      setStatus(null);
+      try {
+        const response = await fetch("/api/revert", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ path: initial.path, sha }),
+        });
+        const data = (await response.json()) as
+          | { ok: true }
+          | { ok: false; code: string; message: string };
+        if (response.ok && data.ok) {
+          window.location.reload();
+          return;
+        }
+        setStatus({ kind: "error", text: !data.ok ? data.message : "还原失败" });
+      } catch (err) {
+        setStatus({ kind: "error", text: `还原失败：${(err as Error).message}` });
+      } finally {
+        setSaving(false);
+      }
+    },
+    [initial.path],
+  );
+
   const insertExternalLink = useCallback(() => {
     // 由 Toolbar 处理；保留占位以便后续扩展。
   }, []);
@@ -299,7 +329,7 @@ export default function Editor({ initial, user, history }: Props) {
 
       {readOnly && (
         <div className="mb-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          当前身份是 reader/viewer，只能阅读，不能保存。切到“编辑者”或“管理员”再试。
+          当前账号没有编辑权限（viewer），只能阅读。需要编辑请让管理员调整角色。
         </div>
       )}
 
@@ -337,11 +367,21 @@ export default function Editor({ initial, user, history }: Props) {
                 <span className="text-stone-700">{item.message}</span>
                 <span>· {item.author}</span>
                 <span>· {new Date(item.date).toLocaleString("zh-CN")}</span>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => revertTo(item.sha)}
+                  className="rounded border border-stone-300 px-1.5 py-0.5 text-[11px] text-stone-600 hover:bg-stone-100 disabled:opacity-50"
+                >
+                  恢复此版本
+                </button>
               </li>
             ))}
           </ul>
         )}
-        <p className="mt-2 text-[11px] text-stone-400">M1 只展示历史；版本还原在 M2 模块 J 接上。</p>
+        <p className="mt-2 text-[11px] text-stone-400">
+          还原会生成一次新提交，旧版本仍然保留在历史里。
+        </p>
       </section>
 
       {diff && (
