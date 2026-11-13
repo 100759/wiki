@@ -27,7 +27,9 @@ export interface AttemptContext {
 export interface FileChange {
   path: string;
   /** 固定内容，或每次尝试都基于新 head 重新计算的共享文件（如 meta）。 */
-  content: string | Buffer | ((ctx: AttemptContext) => Promise<string | Buffer>);
+  content?: string | Buffer | ((ctx: AttemptContext) => Promise<string | Buffer>);
+  /** true 表示删除该路径（Git tree 里写 sha: null）。 */
+  remove?: boolean;
 }
 
 export interface CommitPlan {
@@ -63,7 +65,9 @@ export async function commitFiles(client: GithubClient, plan: CommitPlan): Promi
     // 每次尝试都重新解析内容：共享文件要基于最新 head 合并。
     const resolved: { path: string; buffer: Buffer }[] = [];
     for (const file of plan.files) {
+      if (file.remove) continue;
       const value = typeof file.content === "function" ? await file.content(ctx) : file.content;
+      if (value === undefined) continue;
       resolved.push({ path: file.path, buffer: toBuffer(value) });
     }
     const byPath = new Map(resolved.map((file) => [file.path, file.buffer]));
@@ -88,10 +92,11 @@ export async function commitFiles(client: GithubClient, plan: CommitPlan): Promi
     }
     lastBlobs = blobs;
 
-    const treeSha = await client.createTree(
-      tree.sha,
-      resolved.map((file) => ({ path: file.path, sha: blobs[file.path] ?? "" })),
-    );
+    const entries = [
+      ...resolved.map((file) => ({ path: file.path, sha: blobs[file.path] ?? "" })),
+      ...plan.files.filter((file) => file.remove).map((file) => ({ path: file.path, sha: null })),
+    ];
+    const treeSha = await client.createTree(tree.sha, entries);
     const commitSha = await client.createCommit(plan.message, treeSha, [head]);
 
     try {

@@ -1,0 +1,72 @@
+---
+import Base from "../layouts/Base.astro";
+import { getSession } from "../lib/session";
+
+export const prerender = false;
+
+const session = getSession(Astro.cookies);
+if (!session) {
+  return Astro.redirect(`/login?next=${encodeURIComponent("/account")}`);
+}
+---
+
+<Base title="账号" sidebar={false}>
+  <div class="mx-auto max-w-md">
+    <h1 class="text-xl font-bold">账号</h1>
+    <p class="mt-1 text-sm text-stone-500">
+      {session.name} · {session.role}
+    </p>
+
+    <form id="pwd-form" class="mt-6 space-y-4 rounded-lg border border-stone-200 bg-white p-5">
+      <h2 class="text-sm font-semibold">修改口令</h2>
+      <label class="block text-sm">
+        <span class="text-stone-600">当前口令</span>
+        <input
+          name="current"
+          type="password"
+          autocomplete="current-password"
+          required
+          class="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 outline-none focus:border-ink"
+        />
+      </label>
+      <label class="block text-sm">
+        <span class="text-stone-600">新口令（至少 12 位）</span>
+        <input
+          name="next"
+          type="password"
+          autocomplete="new-password"
+          minlength="12"
+          required
+          class="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 outline-none focus:border-ink"
+        />
+      </label>
+      <p id="pwd-msg" class="hidden rounded-md px-3 py-2 text-sm"></p>
+      <button type="submit" class="w-full rounded-md bg-ink px-3 py-2 text-sm text-white hover:bg-black">
+        保存
+      </button>
+    </form>
+  </div>
+
+  <script is:inline>
+    const form = document.getElementById("pwd-form");
+    const msg = document.getElementById("pwd-msg");
+    form?.addEventListener("submit", async function (event) {
+      event.preventDefault();
+      const data = new FormData(form);
+      const response = await fetch("/api/account", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          currentPassword: data.get("current"),
+          newPassword: data.get("next"),
+        }),
+      });
+      const payload = await response.json();
+      msg.textContent = payload.ok ? "口令已更新，下次登录用新口令。" : payload.message || "修改失败";
+      msg.className =
+        "rounded-md px-3 py-2 text-sm " +
+        (payload.ok ? "bg-green-50 text-green-800" : "bg-red-50 text-red-700");
+      if (payload.ok) form.reset();
+    });
+  </script>
+</Base>

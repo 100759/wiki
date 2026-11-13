@@ -1,0 +1,140 @@
+---
+import Base from "../../layouts/Base.astro";
+import { getSession } from "../../lib/session";
+import { getUserRepository } from "../../lib/users";
+
+export const prerender = false;
+
+const session = getSession(Astro.cookies);
+if (!session) {
+  return Astro.redirect(`/login?next=${encodeURIComponent("/admin/users")}`);
+}
+if (session.role !== "admin") {
+  return Astro.redirect("/");
+}
+
+const users = await getUserRepository().load();
+---
+
+<Base title="成员管理" sidebar={false}>
+  <div class="mx-auto max-w-2xl">
+    <h1 class="text-xl font-bold">成员管理</h1>
+    <p class="mt-1 text-sm text-stone-500">
+      口令只以 PBKDF2 哈希存在仓库里，任何人（包括管理员）都看不到明文。
+    </p>
+
+    <ul class="mt-6 divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
+      {
+        users.map((user) => (
+          <li class="flex flex-wrap items-center gap-2 px-4 py-3 text-sm">
+            <span class="font-medium">{user.name}</span>
+            <span class="rounded bg-stone-100 px-1.5 py-0.5 text-[11px] text-stone-500">
+              {user.role}
+            </span>
+            <span class="ml-auto flex items-center gap-2 text-xs">
+              <select data-role-for={user.name} class="rounded-md border border-stone-300 px-1.5 py-1">
+                {["admin", "editor", "viewer"].map((role) => (
+                  <option value={role} selected={role === user.role}>
+                    {role}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                data-reset={user.name}
+                class="rounded-md border border-stone-300 px-2 py-1 hover:bg-stone-100"
+              >
+                重置口令
+              </button>
+              <button
+                type="button"
+                data-remove={user.name}
+                class="rounded-md border border-red-300 px-2 py-1 text-red-700 hover:bg-red-50"
+              >
+                移除
+              </button>
+            </span>
+          </li>
+        ))
+      }
+    </ul>
+
+    <form id="add-form" class="mt-6 space-y-3 rounded-lg border border-stone-200 bg-white p-5 text-sm">
+      <h2 class="font-semibold">新增成员</h2>
+      <div class="flex flex-wrap gap-2">
+        <input
+          name="name"
+          placeholder="名字（登录用）"
+          required
+          class="min-w-40 flex-1 rounded-md border border-stone-300 px-3 py-2 outline-none focus:border-ink"
+        />
+        <input
+          name="password"
+          type="password"
+          placeholder="初始口令（至少 8 位）"
+          minlength="8"
+          required
+          class="min-w-40 flex-1 rounded-md border border-stone-300 px-3 py-2 outline-none focus:border-ink"
+        />
+        <select name="role" class="rounded-md border border-stone-300 px-2 py-2">
+          <option value="editor">editor</option>
+          <option value="viewer">viewer</option>
+          <option value="admin">admin</option>
+        </select>
+        <button type="submit" class="rounded-md bg-ink px-3 py-2 text-white hover:bg-black">添加</button>
+      </div>
+      <p id="admin-msg" class="hidden rounded-md px-3 py-2"></p>
+    </form>
+  </div>
+
+  <script is:inline>
+    const msg = document.getElementById("admin-msg");
+    function show(text, ok) {
+      msg.textContent = text;
+      msg.className =
+        "rounded-md px-3 py-2 text-sm " + (ok ? "bg-green-50 text-green-800" : "bg-red-50 text-red-700");
+    }
+    async function call(payload) {
+      const response = await fetch("/api/users", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      return response.json();
+    }
+    document.getElementById("add-form")?.addEventListener("submit", async function (event) {
+      event.preventDefault();
+      const data = new FormData(event.target);
+      const result = await call({
+        action: "add",
+        name: data.get("name"),
+        password: data.get("password"),
+        role: data.get("role"),
+      });
+      show(result.ok ? "已添加" : result.message || "添加失败", result.ok);
+      if (result.ok) setTimeout(() => location.reload(), 600);
+    });
+    document.querySelectorAll("[data-role-for]").forEach(function (select) {
+      select.addEventListener("change", async function () {
+        const result = await call({ action: "role", name: select.dataset.roleFor, role: select.value });
+        show(result.ok ? "角色已更新" : result.message || "更新失败", result.ok);
+      });
+    });
+    document.querySelectorAll("[data-reset]").forEach(function (button) {
+      button.addEventListener("click", async function () {
+        const password = window.prompt("给 " + button.dataset.reset + " 设置新口令（至少 8 位）");
+        if (!password) return;
+        const result = await call({ action: "reset", name: button.dataset.reset, password });
+        show(result.ok ? "口令已重置" : result.message || "重置失败", result.ok);
+      });
+    });
+    document.querySelectorAll("[data-remove]").forEach(function (button) {
+      button.addEventListener("click", async function () {
+        if (!window.confirm("移除成员 " + button.dataset.remove + "？")) return;
+        const result = await call({ action: "remove", name: button.dataset.remove });
+        if (result.ok) location.reload();
+        else show(result.message || "移除失败", false);
+      });
+    });
+  </script>
+</Base>

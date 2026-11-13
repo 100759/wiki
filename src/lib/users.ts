@@ -123,6 +123,51 @@ export async function makeUser(name: string, password: string, role: Role): Prom
   return { uid, name: name.trim(), role, ...hash };
 }
 
+export async function setUserRole(
+  repo: UserRepository,
+  name: string,
+  role: Role,
+): Promise<UserRecord> {
+  const users = await repo.load();
+  const target = findUser(users, name);
+  if (!target) throw new Error("用户不存在");
+  if (target.role === "admin" && role !== "admin") {
+    const admins = users.filter((user) => user.role === "admin");
+    if (admins.length <= 1) throw new Error("至少要保留一个管理员");
+  }
+  target.role = role;
+  await repo.save(users, `chore(users): ${target.name} 角色改为 ${role}`);
+  return target;
+}
+
+export async function setUserPassword(
+  repo: UserRepository,
+  name: string,
+  password: string,
+): Promise<void> {
+  const users = await repo.load();
+  const target = findUser(users, name);
+  if (!target) throw new Error("用户不存在");
+  const hash = await hashPassword(password);
+  target.salt = hash.salt;
+  target.hash = hash.hash;
+  target.iterations = hash.iterations;
+  await repo.save(users, `chore(users): 重置 ${target.name} 的口令`);
+}
+
+export async function removeUser(repo: UserRepository, name: string): Promise<void> {
+  const users = await repo.load();
+  const target = findUser(users, name);
+  if (!target) throw new Error("用户不存在");
+  if (target.role === "admin" && users.filter((user) => user.role === "admin").length <= 1) {
+    throw new Error("至少要保留一个管理员");
+  }
+  await repo.save(
+    users.filter((user) => user.uid !== target.uid),
+    `chore(users): 移除成员 ${target.name}`,
+  );
+}
+
 export async function addUser(
   repo: UserRepository,
   name: string,

@@ -32,6 +32,38 @@ md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
   return defaultLinkOpen(tokens, idx, options, env, self);
 };
 
+export interface TocItem {
+  level: number;
+  text: string;
+  id: string;
+}
+
+function slugifyHeading(text: string): string {
+  return text
+    .replace(/<[^>]+>/g, "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^\w\u4e00-\u9fa5]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "section";
+}
+
+/** 渲染正文并给 h2/h3 加锚点，同时返回目录。 */
+export function renderPage(source: string): { html: string; toc: TocItem[] } {
+  const raw = md.render(source);
+  const toc: TocItem[] = [];
+  const seen = new Map<string, number>();
+  const html = raw.replace(/<h([23])>(.*?)<\/h\1>/g, (_match, level: string, inner: string) => {
+    const text = inner.replace(/<[^>]+>/g, "").trim();
+    const base = slugifyHeading(text);
+    const count = (seen.get(base) ?? 0) + 1;
+    seen.set(base, count);
+    const id = count === 1 ? base : `${base}-${count}`;
+    toc.push({ level: Number(level), text, id });
+    return `<h${level} id="${id}">${inner}</h${level}>`;
+  });
+  return { html, toc };
+}
+
 export function renderMarkdown(source: string): string {
   return md.render(source);
 }

@@ -136,9 +136,13 @@ class FakeGithub {
     }
 
     if (method === "POST" && path === "/git/trees") {
-      const entries = (body.tree ?? []) as { path: string; sha: string }[];
+      const entries = (body.tree ?? []) as { path: string; sha: string | null }[];
       const staged = new Map(this.files);
       for (const entry of entries) {
+        if (entry.sha === null) {
+          staged.delete(entry.path);
+          continue;
+        }
         const blob = this.findBlob(entry.sha);
         if (!blob) return respond({ message: "blob 不存在" }, 422);
         staged.set(entry.path, { content: blob, sha: entry.sha });
@@ -522,11 +526,49 @@ async function testCommitFiles(): Promise<void> {
   ok("已落地分支回传真实 blob sha", replay.ok && /^[0-9a-f]{40}$/.test(replay.blobs["content/dup.md"] ?? ""));
 }
 
+async function testManage(): Promise<void> {
+  console.log("\n[5] 页面管理与搜索");
+  const fake = new FakeGithub({
+    "content/index.md": "# 首页\n\n欢迎来到共创 Wiki。\n",
+    "content/guide/start.md": "# 快速上手\n\n先登录，再编辑。\n",
+    "_system/meta.json": JSON.stringify({ version: 1, pages: { "content/guide/start.md": { title: "快速上手", acl: ["admin"] } } }),
+  });
+  const client = new GithubClient({ repo: "o/r", branch: "main", token: "t", proxy: null }, fake.transport);
+  const store = new GithubStore(client);
+  const admin = { uid: "u1", name: "管理员", role: "admin" as const };
+  const editor = { uid: "u2", name: "编辑", role: "editor" as const };
+
+  const renamed = await store.renamePage("content/guide/start.md", "content/guide/intro.md", admin);
+  ok("重命名成功", renamed.ok, JSON.stringify(renamed));
+  ok("旧路径已删除", !(await store.getPageByPath("content/guide/start.md")));
+  ok("新路径可读", (await store.getPageByPath("content/guide/intro.md"))?.title === "快速上手");
+  const metaAfter = JSON.parse(fake.files.get("_system/meta.json")?.content.toString("utf8") ?? "{}") as {
+    pages: Record<string, { acl?: string[] }>;
+  };
+  ok("meta 条目跟着迁移", JSON.stringify(metaAfter.pages["content/guide/intro.md"]?.acl) === '["admin"]' && !metaAfter.pages["content/guide/start.md"]);
+
+  const editorDelete = await store.deletePage("content/guide/intro.md", editor);
+  ok("editor 不能删 admin-only 页", !editorDelete.ok && editorDelete.code === "forbidden");
+
+  const deleted = await store.deletePage("content/guide/intro.md", admin);
+  ok("管理员删除成功", deleted.ok, JSON.stringify(deleted));
+  ok("删除后读不到", !(await store.getPageByPath("content/guide/intro.md")));
+
+  const { searchPages } = await import("../src/lib/search");
+  const byTitle = await searchPages(store, "首页");
+  ok("搜索命中标题", byTitle.length === 1 && byTitle[0]?.path === "content/index.md");
+  const byBody = await searchPages(store, "欢迎");
+  ok("搜索命中正文", byBody.length === 1);
+  const none = await searchPages(store, "不存在的词");
+  ok("无匹配返回空", none.length === 0);
+}
+
 async function main(): Promise<void> {
   await testAuth();
   testRateLimit();
   await testStore();
   await testCommitFiles();
+  await testManage();
   console.log(`\n结果：${passed} 通过 / ${failed} 失败`);
   if (failed > 0) process.exit(1);
 }

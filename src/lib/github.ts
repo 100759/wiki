@@ -345,7 +345,7 @@ export class GithubClient {
 
   async createTree(
     baseTree: string,
-    entries: { path: string; sha: string; mode?: string; type?: string }[],
+    entries: { path: string; sha: string | null; mode?: string; type?: string }[],
   ): Promise<string> {
     const { json } = await this.call("POST", `/repos/${this.config.repo}/git/trees`, {
       base_tree: baseTree,

@@ -1,13 +1,20 @@
 ---
 import "../styles/global.css";
 import { getSession } from "../lib/session";
+import { buildNav } from "../lib/nav";
+import { getStore } from "../lib/storage";
 
 interface Props {
   title?: string;
+  /** 阅读页/编辑页展示左侧导航；登录页等可以关掉。 */
+  sidebar?: boolean;
+  activePath?: string;
 }
 
-const { title = "共创 Wiki" } = Astro.props;
+const { title = "共创 Wiki", sidebar = true, activePath } = Astro.props;
 const session = getSession(Astro.cookies);
+const pages = sidebar ? await getStore().listPages() : [];
+const nav = buildNav(pages);
 ---
 
 <!doctype html>
@@ -16,48 +23,84 @@ const session = getSession(Astro.cookies);
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex" />
+    <meta name="theme-color" content="#1c1917" />
     <title>{title} · 共创 Wiki</title>
   </head>
   <body class="min-h-screen bg-paper text-ink antialiased">
-    <header class="border-b border-stone-200 bg-white/80 backdrop-blur">
-      <div class="mx-auto flex max-w-5xl flex-wrap items-center gap-3 px-4 py-3">
-        <a href="/" class="mr-2 text-lg font-bold tracking-tight">共创 Wiki</a>
-        <a href="/" class="text-sm text-stone-600 hover:text-ink">全部页面</a>
-        <a href="/edit?path=content/new-page.md" class="text-sm text-stone-600 hover:text-ink">新建页面</a>
+    <header class="sticky top-0 z-10 border-b border-stone-200 bg-white/85 backdrop-blur">
+      <div class="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-3">
+        <a href="/" class="mr-1 text-lg font-bold tracking-tight">共创 Wiki</a>
 
-        <div class="ml-auto flex items-center gap-2 text-xs text-stone-500">
+        <form action="/search" method="get" class="order-3 w-full sm:order-2 sm:w-64">
+          <input
+            type="search"
+            name="q"
+            placeholder="搜索标题与正文"
+            class="w-full rounded-md border border-stone-300 bg-white px-3 py-1.5 text-sm outline-none focus:border-ink"
+          />
+        </form>
+
+        <nav class="order-2 ml-auto flex items-center gap-2 text-sm text-stone-600 sm:order-3">
+          <a href="/edit?path=content/new-page.md" class="hover:text-ink">新建页面</a>
           {
             session ? (
               <>
-                <span>
+                <span class="text-xs text-stone-500">
                   {session.name}
-                  <span class="ml-1 rounded bg-stone-100 px-1.5 py-0.5 text-[11px] text-stone-500">
-                    {session.role}
-                  </span>
+                  <span class="ml-1 rounded bg-stone-100 px-1.5 py-0.5 text-[11px]">{session.role}</span>
                 </span>
+                {session.role === "admin" && (
+                  <a href="/admin/users" class="text-xs hover:text-ink">成员</a>
+                )}
+                <a href="/account" class="text-xs hover:text-ink">账号</a>
                 <button
                   type="button"
                   id="logout"
-                  class="rounded-md border border-stone-300 px-2 py-1 text-stone-600 hover:bg-stone-100"
+                  class="rounded-md border border-stone-300 px-2 py-1 text-xs hover:bg-stone-100"
                 >
                   退出
                 </button>
               </>
             ) : (
-              <a href="/login" class="rounded-md border border-stone-300 px-2 py-1 text-stone-600 hover:bg-stone-100">
+              <a href="/login" class="rounded-md border border-stone-300 px-2 py-1 text-xs hover:bg-stone-100">
                 登录
               </a>
             )
           }
-        </div>
+        </nav>
       </div>
     </header>
 
-    <main class="mx-auto max-w-5xl px-4 py-8">
-      <slot />
-    </main>
+    <div class="mx-auto flex max-w-6xl gap-6 px-4 py-6">
+      {
+        sidebar && (
+          <aside class="hidden w-56 shrink-0 lg:block">
+            <nav class="sticky top-20 space-y-0.5 text-sm">
+              {nav.map((item) => (
+                <a
+                  href={`/w/${item.slug}`}
+                  class:list={[
+                    "block truncate rounded-md px-2 py-1.5 hover:bg-stone-100",
+                    item.path === activePath ? "bg-stone-100 font-medium text-ink" : "text-stone-600",
+                  ]}
+                  style={`padding-left: ${0.5 + item.depth * 0.75}rem`}
+                  title={item.path}
+                >
+                  {item.title}
+                </a>
+              ))}
+              {nav.length === 0 && <p class="px-2 text-xs text-stone-400">还没有页面。</p>}
+            </nav>
+          </aside>
+        )
+      }
 
-    <footer class="mx-auto max-w-5xl px-4 pb-10 pt-4 text-xs text-stone-400">
+      <main class="min-w-0 flex-1">
+        <slot />
+      </main>
+    </div>
+
+    <footer class="mx-auto max-w-6xl px-4 pb-10 pt-2 text-xs text-stone-400">
       读者免登录阅读 · 保存需登录 · 正文与历史都存在 GitHub 仓库
     </footer>
 

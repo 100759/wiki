@@ -93,6 +93,20 @@ export class GithubStore implements ContentStore {
     }
   }
 
+  /** meta 写入器：每次尝试基于最新 head 重新读，避免覆盖别人刚写的条目。 */
+  private metaWriter(mutate: (pages: Record<string, PageMeta>) => void): FileChange {
+    return {
+      path: META_PATH,
+      content: async (ctx) => {
+        const entry = ctx.entries.get(META_PATH);
+        const base = entry ? parseMetaStrict(await ctx.client.readBlob(entry.sha)) : { version: 1 as const, pages: {} };
+        const pages = { ...base.pages };
+        mutate(pages);
+        return `${JSON.stringify({ version: 1, pages }, null, 2)}\n`;
+      },
+    };
+  }
+
   /** 写路径专用：meta 存在但读不到/解析失败时整次操作失败，避免默认 ACL 放行。 */
   private async readMetaStrictForWrite(
     entries: Map<string, { sha: string }>,
@@ -308,33 +322,18 @@ export class GithubStore implements ContentStore {
     files.push({ path: contentPath, content: markdown });
     // meta.json 是共享文件：两个编辑改不同页都会写它。不能进 expected，
     // 否则"不同页并发"会被误判成冲突；改为每次尝试基于最新 head 重新合并。
-    files.push({
-      path: META_PATH,
-      content: async (ctx) => {
-        // 只有"文件本来就不存在"才允许用空表起步；
-        // 存在但读不到/解析不了时直接抛错，避免把其他页的标题、排序、ACL 抹掉。
-        let base: MetaFile = { version: 1, pages: {} };
-        const entry = ctx.entries.get(META_PATH);
-        if (entry) {
-          base = parseMetaStrict(await ctx.client.readBlob(entry.sha));
-        }
-        const previous = base.pages[contentPath] ?? {};
-        const next: MetaFile = {
-          version: 1,
-          pages: {
-            ...base.pages,
-            [contentPath]: {
-              title,
-              order: previous.order ?? metaInfo.order ?? 100,
-              acl: previous.acl ?? acl,
-              updatedAt: now,
-              updatedBy: input.actor.name,
-            },
-          },
+    files.push(
+      this.metaWriter((pages) => {
+        const previous = pages[contentPath] ?? {};
+        pages[contentPath] = {
+          title,
+          order: previous.order ?? metaInfo.order ?? 100,
+          acl: previous.acl ?? acl,
+          updatedAt: now,
+          updatedBy: input.actor.name,
         };
-        return `${JSON.stringify(next, null, 2)}\n`;
-      },
-    });
+      }),
+    );
 
     const outcome = await commitFiles(this.client, {
       message: current ? `更新 ${title}（${input.actor.name}）` : `创建 ${title}（${input.actor.name}）`,
@@ -406,6 +405,95 @@ export class GithubStore implements ContentStore {
     } catch {
       return [];
     }
+  }
+
+  async deletePage(input: string, actor: SaveInput["actor"]): Promise<SaveResult> {
+    if (actor.role === "viewer") {
+      return { ok: false, code: "forbidden", message: "viewer 角色不能删除页面" };
+    }
+    let contentPath: string;
+    try {
+      contentPath = normalizeContentPath(input);
+    } catch (err) {
+      return { ok: false, code: "invalid", message: (err as Error).message };
+    }
+
+    const tree = await this.client.tree();
+    if (tree.truncated) return { ok: false, code: "invalid", message: "仓库目录被截断，暂不能安全删除" };
+    const current = tree.entries.get(contentPath)?.sha ?? null;
+    if (!current) return { ok: false, code: "invalid", message: "页面不存在" };
+
+    const { meta } = await this.readMetaStrictForWrite(tree.entries);
+    const acl = meta.pages[contentPath]?.acl ?? [...DEFAULT_ACL];
+    if (actor.role !== "admin" && !acl.includes(actor.role)) {
+      return { ok: false, code: "forbidden", message: "当前账号无权删除本页" };
+    }
+
+    const outcome = await commitFiles(this.client, {
+      message: `删除 ${contentPath.replace(/^content\//, "")}（${actor.name}）`,
+      files: [
+        { path: contentPath, remove: true },
+        this.metaWriter((pages) => {
+          delete pages[contentPath];
+        }),
+      ],
+      expected: { [contentPath]: current },
+    });
+    if (!outcome.ok) return { ok: false, code: "conflict", message: "页面已被他人修改，请刷新后重试" };
+    return { ok: true, sha: "", commit: outcome.commit };
+  }
+
+  async renamePage(from: string, to: string, actor: SaveInput["actor"]): Promise<SaveResult> {
+    if (actor.role === "viewer") {
+      return { ok: false, code: "forbidden", message: "viewer 角色不能重命名页面" };
+    }
+    let fromPath: string;
+    let toPath: string;
+    try {
+      fromPath = normalizeContentPath(from);
+      toPath = normalizeContentPath(to);
+    } catch (err) {
+      return { ok: false, code: "invalid", message: (err as Error).message };
+    }
+    if (fromPath === toPath) return { ok: false, code: "invalid", message: "新旧路径相同" };
+
+    const tree = await this.client.tree();
+    if (tree.truncated) return { ok: false, code: "invalid", message: "仓库目录被截断，暂不能安全移动" };
+    const fromSha = tree.entries.get(fromPath)?.sha ?? null;
+    if (!fromSha) return { ok: false, code: "invalid", message: "原页面不存在" };
+    if (tree.entries.has(toPath)) return { ok: false, code: "invalid", message: "目标路径已存在" };
+
+    const { meta } = await this.readMetaStrictForWrite(tree.entries);
+    const acl = meta.pages[fromPath]?.acl ?? [...DEFAULT_ACL];
+    if (actor.role !== "admin" && !acl.includes(actor.role)) {
+      return { ok: false, code: "forbidden", message: "当前账号无权移动本页" };
+    }
+
+    const markdown = await this.client.readBlob(fromSha);
+    const title = meta.pages[fromPath]?.title ?? guessTitle(fromPath, markdown);
+    const now = new Date().toISOString();
+
+    const outcome = await commitFiles(this.client, {
+      message: `重命名 ${fromPath.replace(/^content\//, "")} → ${toPath.replace(/^content\//, "")}（${actor.name}）`,
+      files: [
+        { path: toPath, content: markdown },
+        { path: fromPath, remove: true },
+        this.metaWriter((pages) => {
+          const previous = pages[fromPath] ?? {};
+          delete pages[fromPath];
+          pages[toPath] = {
+            ...previous,
+            title,
+            acl: previous.acl ?? acl,
+            updatedAt: now,
+            updatedBy: actor.name,
+          };
+        }),
+      ],
+      expected: { [fromPath]: fromSha, [toPath]: null },
+    });
+    if (!outcome.ok) return { ok: false, code: "conflict", message: "页面已被他人修改，请刷新后重试" };
+    return { ok: true, sha: outcome.blobs[toPath] ?? "", commit: outcome.commit };
   }
 
   async restore(input: string, commitSha: string, actor: SaveInput["actor"]): Promise<SaveResult> {

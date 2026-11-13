@@ -1,0 +1,37 @@
+---
+import Base from "../layouts/Base.astro";
+import { searchPages } from "../lib/search";
+import { getStore } from "../lib/storage";
+
+export const prerender = false;
+
+const q = (Astro.url.searchParams.get("q") ?? "").trim();
+const hits = q ? await searchPages(getStore(), q) : [];
+---
+
+<Base title={q ? `搜索：${q}` : "搜索"} sidebar={false}>
+  <div class="mb-5">
+    <h1 class="text-xl font-bold">{q ? `搜索“${q}”` : "搜索"}</h1>
+    <p class="mt-1 text-sm text-stone-500">共 {hits.length} 条结果，匹配标题与正文。</p>
+  </div>
+
+  {
+    hits.length === 0 ? (
+      <p class="rounded-lg border border-dashed border-stone-300 p-8 text-center text-stone-500">
+        {q ? "没有找到匹配的内容，换个关键词试试。" : "在上方输入关键词。"}
+      </p>
+    ) : (
+      <ul class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
+        {hits.map((hit) => (
+          <li class="px-4 py-3">
+            <a href={`/w/${hit.slug}`} class="font-medium hover:text-blue-700">
+              {hit.title}
+            </a>
+            <p class="mt-1 text-sm text-stone-500">{hit.snippet}</p>
+            <p class="mt-1 text-[11px] text-stone-400">{hit.path}</p>
+          </li>
+        ))}
+      </ul>
+    )
+  }
+</Base>

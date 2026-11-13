@@ -70,6 +70,10 @@ export interface ContentStore {
   ): Promise<{ sha: string; message: string; date: string; author: string }[]>;
   /** 还原是写操作，必须带操作者，权限按操作者判。 */
   restore(path: string, sha: string, actor: SaveInput["actor"]): Promise<SaveResult>;
+  /** 删除页面（同时清掉 meta 条目）。 */
+  deletePage(path: string, actor: SaveInput["actor"]): Promise<SaveResult>;
+  /** 重命名/移动页面。 */
+  renamePage(from: string, to: string, actor: SaveInput["actor"]): Promise<SaveResult>;
 }
 
 /* ------------------------------------------------------------------ *
@@ -539,6 +543,68 @@ export class LocalFileStore implements ContentStore {
     await fs.mkdir(dir, { recursive: true });
     await fs.writeFile(path.join(dir, name), input.bytes);
     return { ok: true, url: `/uploads/${id}/${encodeURIComponent(name)}` };
+  }
+
+  async deletePage(input: string, actor: SaveInput["actor"]): Promise<SaveResult> {
+    if (actor.role === "viewer") return { ok: false, code: "forbidden", message: "viewer 角色不能删除页面" };
+    let contentPath: string;
+    try {
+      contentPath = normalizeContentPath(input);
+    } catch (err) {
+      return { ok: false, code: "invalid", message: (err as Error).message };
+    }
+    if (!(await this.ensureDirs())) {
+      return { ok: false, code: "invalid", message: "当前部署为只读存储" };
+    }
+    const meta = await this.loadIndex();
+    const current = meta.pages.find((p) => p.path === contentPath);
+    if (!current) return { ok: false, code: "invalid", message: "页面不存在" };
+    const acl = current.acl.length > 0 ? current.acl : [...DEFAULT_ACL];
+    if (actor.role !== "admin" && !acl.includes(actor.role)) {
+      return { ok: false, code: "forbidden", message: "当前账号无权删除本页" };
+    }
+    try {
+      await fs.unlink(this.fileFor(contentPath));
+    } catch {
+      /* 文件不存在也继续清索引 */
+    }
+    meta.pages = meta.pages.filter((p) => p.path !== contentPath);
+    await this.writeMetaFile(meta);
+    return { ok: true, sha: "", commit: "" };
+  }
+
+  async renamePage(from: string, to: string, actor: SaveInput["actor"]): Promise<SaveResult> {
+    if (actor.role === "viewer") return { ok: false, code: "forbidden", message: "viewer 角色不能重命名页面" };
+    let fromPath: string;
+    let toPath: string;
+    try {
+      fromPath = normalizeContentPath(from);
+      toPath = normalizeContentPath(to);
+    } catch (err) {
+      return { ok: false, code: "invalid", message: (err as Error).message };
+    }
+    if (fromPath === toPath) return { ok: false, code: "invalid", message: "新旧路径相同" };
+    if (!(await this.ensureDirs())) {
+      return { ok: false, code: "invalid", message: "当前部署为只读存储" };
+    }
+    const page = await this.getPageByPath(fromPath);
+    if (!page) return { ok: false, code: "invalid", message: "页面不存在" };
+    if (actor.role !== "admin" && !page.acl.includes(actor.role)) {
+      return { ok: false, code: "forbidden", message: "当前账号无权移动本页" };
+    }
+    if (await this.getPageByPath(toPath)) {
+      return { ok: false, code: "invalid", message: "目标路径已存在" };
+    }
+    const created = await this.savePage({
+      path: toPath,
+      title: page.title,
+      markdown: page.markdown,
+      baseSha: null,
+      images: [],
+      actor,
+    });
+    if (!created.ok) return created;
+    return this.deletePage(fromPath, actor);
   }
 
   async restore(input: string, sha: string, actor: SaveInput["actor"]): Promise<SaveResult> {
