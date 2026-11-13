@@ -2,7 +2,7 @@
 import Base from "../../layouts/Base.astro";
 import { pathToSlug, slugToPath } from "../../lib/ids";
 import { neighbours } from "../../lib/nav";
-import { renderPage } from "../../lib/render";
+import { renderPage, stripLeadingTitle } from "../../lib/render";
 import { getSession } from "../../lib/session";
 import { getStore } from "../../lib/storage";
 
@@ -34,7 +34,7 @@ if (ifNoneMatch && ifNoneMatch.split(",").some((tag) => tag.trim() === etag)) {
 Astro.response.headers.set("Cache-Control", headers.get("Cache-Control")!);
 Astro.response.headers.set("ETag", etag);
 
-const { html, toc } = renderPage(page.markdown);
+const { html, toc } = renderPage(stripLeadingTitle(page.markdown, page.title));
 const session = getSession(Astro.cookies);
 const canEdit = Boolean(session && session.role !== "viewer");
 const { prev, next } = neighbours(await store.listPages(), page.path);

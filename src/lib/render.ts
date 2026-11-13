@@ -64,6 +64,17 @@ export function renderPage(source: string): { html: string; toc: TocItem[] } {
   return { html, toc };
 }
 
+/** 正文首行 H1 与页面标题重复时去掉，避免页面上出现两个大标题。 */
+export function stripLeadingTitle(markdown: string, title: string): string {
+  const match = markdown.match(/^\s*#\s+(.+?)\s*\n/);
+  if (!match) return markdown;
+  const heading = match[1]?.trim() ?? "";
+  if (heading && heading === title.trim()) {
+    return markdown.slice(match[0].length).replace(/^\s*\n/, "");
+  }
+  return markdown;
+}
+
 export function renderMarkdown(source: string): string {
   return md.render(source);
 }
