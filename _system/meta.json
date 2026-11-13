@@ -10,6 +10,16 @@
       ],
       "updatedAt": "2026-11-13T09:01:20.011Z",
       "updatedBy": "admin"
+    },
+    "content/guide/start.md": {
+      "title": "快速上手",
+      "order": 100,
+      "acl": [
+        "admin",
+        "editor"
+      ],
+      "updatedAt": "2026-11-13T09:23:39.075Z",
+      "updatedBy": "admin"
     }
   }
 }
