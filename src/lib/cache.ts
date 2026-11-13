@@ -17,5 +17,8 @@ export function setPageCache(
   }
   const maxAge = options.maxAge ?? 180;
   const swr = options.swr ?? 1800;
-  headers.set("Cache-Control", `public, s-maxage=${maxAge}, stale-while-revalidate=${swr}`);
+  headers.set(
+    "Cache-Control",
+    `public, max-age=${Math.min(maxAge, 30)}, s-maxage=${maxAge}, stale-while-revalidate=${swr}`,
+  );
 }
