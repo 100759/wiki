@@ -10,16 +10,6 @@
       ],
       "updatedAt": "2026-11-13T09:01:20.011Z",
       "updatedBy": "admin"
-    },
-    "content/_imgtest.md": {
-      "title": "图片自检",
-      "order": 100,
-      "acl": [
-        "admin",
-        "editor"
-      ],
-      "updatedAt": "2026-11-13T09:17:49.751Z",
-      "updatedBy": "admin"
     }
   }
 }
