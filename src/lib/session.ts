@@ -5,7 +5,7 @@ import type { AstroCookies } from "astro";
  * M2 模块 F：真实会话与口令
  *  - 口令：PBKDF2-SHA256，600k 轮，每用户独立 salt（OWASP 建议值）
  *  - 会话：HMAC-SHA256 签名的 Cookie，服务端不存 session（无 Blob/KV 也能用）
- *  - M1 的 mock_role 已彻底删除，Cookie 无法伪造角色
+ *  - M1 那种按 Cookie 直读角色的登录方式已整体删除，Cookie 无法伪造身份
  * ------------------------------------------------------------------ */
 
 export type Role = "admin" | "editor" | "viewer";
@@ -150,7 +150,8 @@ export function clearCookie(): string {
 
 /* ------------------------- 登录限流 ------------------------- */
 
-const MAX_FAILURES = 5;
+const MAX_FAILURES = 5;          // 单账号
+const MAX_IP_FAILURES = 20;       // 单 IP 跨账号（共享出口 IP 不至于第 6 次就误伤）
 const WINDOW_MS = 15 * 60 * 1000;
 const LOCK_MS = 15 * 60 * 1000;
 
@@ -172,7 +173,7 @@ export interface RateLimitState {
 }
 
 export function checkRateLimit(ip: string, user: string, now = Date.now()): RateLimitState {
-  for (const key of [keyOf("ip", ip), keyOf("user", user), `ipall:${ip}`]) {
+  for (const key of [keyOf("ip", ip), keyOf("user", user)]) {
     const bucket = buckets.get(key);
     if (!bucket) continue;
     if (bucket.lockedUntil > now) {
@@ -184,9 +185,9 @@ export function checkRateLimit(ip: string, user: string, now = Date.now()): Rate
 }
 
 export function recordFailure(ip: string, user: string, now = Date.now()): void {
-  // ipall 用更高阈值：防止换用户名绕开按账号的限流，同时不误伤正常用户。
-  for (const key of [keyOf("ip", ip), keyOf("user", user), `ipall:${ip}`]) {
-    const limit = key.startsWith("ipall:") ? MAX_FAILURES * 6 : MAX_FAILURES;
+  // ip 桶按 IP 聚合所有用户名，阈值更高：既能挡住换名撞库，也不会让共享出口挨一刀。
+  for (const key of [keyOf("ip", ip), keyOf("user", user)]) {
+    const limit = key.startsWith("ip:") ? MAX_IP_FAILURES : MAX_FAILURES;
     const bucket = buckets.get(key);
     if (!bucket || now - bucket.firstAt > WINDOW_MS) {
       buckets.set(key, { failures: 1, firstAt: now, lockedUntil: 0 });

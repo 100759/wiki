@@ -4,9 +4,6 @@ import { getStore } from "../../lib/storage";
 
 export const prerender = false;
 
-const MAX_IMAGE_BYTES = 800 * 1024;
-const ALLOWED_MIME = new Set(["image/webp", "image/png", "image/jpeg", "image/gif"]);
-
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -49,31 +46,13 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     return json({ ok: false, code: "invalid", message: "baseSha 必须是字符串或 null" }, 400);
   }
 
-  const images: { name: string; bytes: Uint8Array; mime: string }[] = [];
+  // 图片已改为独立上传（/api/upload，原始二进制）。这里显式拒绝，避免旧客户端
+  // 继续把 base64 塞进来撞 1MB 请求体上限。
   if (body.images !== undefined) {
-    if (!Array.isArray(body.images)) {
-      return json({ ok: false, code: "invalid", message: "images 必须是数组" }, 400);
-    }
-    for (const item of body.images) {
-      if (!item || typeof item !== "object") {
-        return json({ ok: false, code: "invalid", message: "图片项不合法" }, 400);
-      }
-      const { name, mime, bytesBase64 } = item as Record<string, unknown>;
-      if (typeof name !== "string" || typeof mime !== "string" || typeof bytesBase64 !== "string") {
-        return json({ ok: false, code: "invalid", message: "图片字段不完整" }, 400);
-      }
-      if (!ALLOWED_MIME.has(mime)) {
-        return json({ ok: false, code: "invalid", message: `不支持的图片类型：${mime}` }, 400);
-      }
-      const bytes = Buffer.from(bytesBase64, "base64");
-      if (bytes.byteLength === 0) {
-        return json({ ok: false, code: "invalid", message: `图片 ${name} 为空` }, 400);
-      }
-      if (bytes.byteLength > MAX_IMAGE_BYTES) {
-        return json({ ok: false, code: "invalid", message: `图片 ${name} 超过 800KB` }, 413);
-      }
-      images.push({ name, mime, bytes: new Uint8Array(bytes) });
-    }
+    return json(
+      { ok: false, code: "invalid", message: "图片请走 /api/upload 单独上传，保存请求不再接收图片" },
+      400,
+    );
   }
 
   const result = await getStore().savePage({
@@ -81,7 +60,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     title: body.title,
     markdown: body.markdown,
     baseSha: body.baseSha,
-    images,
+    images: [],
     actor,
   });
 

@@ -2,6 +2,7 @@ import path from "node:path";
 import { commitFiles, type FileChange } from "./gitcommit";
 import { GithubError, type GithubClient } from "./github";
 import { guessTitle, normalizeContentPath, pageId, pathToSlug } from "./ids";
+import { MAX_IMAGE_BYTES, validateImage } from "./image-rules";
 import type {
   ContentStore,
   PageRecord,
@@ -22,8 +23,7 @@ import type {
 
 export const META_PATH = "_system/meta.json";
 const DEFAULT_ACL = ["admin", "editor"];
-const MAX_IMAGE_BYTES = 800 * 1024;
-const ALLOWED_MIME = new Set(["image/webp", "image/png", "image/jpeg", "image/gif"]);
+
 
 interface PageMeta {
   title?: string;
@@ -91,6 +91,16 @@ export class GithubStore implements ContentStore {
     } catch {
       return { meta: { version: 1, pages: {} }, sha: entry.sha };
     }
+  }
+
+  /** 写路径专用：meta 存在但读不到/解析失败时整次操作失败，避免默认 ACL 放行。 */
+  private async readMetaStrictForWrite(
+    entries: Map<string, { sha: string }>,
+  ): Promise<{ meta: MetaFile; sha: string | null }> {
+    const entry = entries.get(META_PATH);
+    if (!entry) return { meta: { version: 1, pages: {} }, sha: null };
+    const meta = parseMetaStrict(await this.client.readBlob(entry.sha));
+    return { meta, sha: entry.sha };
   }
 
   private async markdownPaths(): Promise<{ sha: string; entries: Map<string, { sha: string }> } | null> {
@@ -263,9 +273,10 @@ export class GithubStore implements ContentStore {
       }
     }
 
-    const { meta } = await this.readMeta(tree.entries);
+    const { meta, sha: metaSha } = await this.readMetaStrictForWrite(tree.entries);
     const metaInfo = meta.pages[contentPath] ?? {};
     const acl = Array.isArray(metaInfo.acl) && metaInfo.acl.length > 0 ? metaInfo.acl : [...DEFAULT_ACL];
+    void metaSha;
     if (input.actor.role !== "admin" && !acl.includes(input.actor.role)) {
       return { ok: false, code: "forbidden", message: "当前账号无权编辑本页" };
     }
@@ -278,15 +289,8 @@ export class GithubStore implements ContentStore {
       if (!image || typeof image.name !== "string" || !(image.bytes instanceof Uint8Array)) {
         return { ok: false, code: "invalid", message: "图片数据不合法" };
       }
-      if (!ALLOWED_MIME.has(image.mime)) {
-        return { ok: false, code: "invalid", message: `不支持的图片类型：${image.mime}` };
-      }
-      if (image.bytes.byteLength === 0) {
-        return { ok: false, code: "invalid", message: `图片 ${image.name} 为空` };
-      }
-      if (image.bytes.byteLength > MAX_IMAGE_BYTES) {
-        return { ok: false, code: "invalid", message: `图片 ${image.name} 超过 800KB` };
-      }
+      const verdict = validateImage(image.name, image.mime, image.bytes.byteLength);
+      if (!verdict.ok) return { ok: false, code: "invalid", message: verdict.message };
       const name = safeName(image.name);
       const repoPath = `assets/${id}/${name}`;
       files.push({ path: repoPath, content: Buffer.from(image.bytes) });
@@ -355,28 +359,21 @@ export class GithubStore implements ContentStore {
     } catch (err) {
       return { ok: false, code: "invalid", message: (err as Error).message };
     }
-    if (!ALLOWED_MIME.has(input.mime)) {
-      return { ok: false, code: "invalid", message: `不支持的图片类型：${input.mime}` };
-    }
-    const ext = (input.name.match(/\.[^.]+$/) ?? [""])[0].toLowerCase();
-    const expectedExt: Record<string, string[]> = {
-      "image/webp": [".webp"],
-      "image/png": [".png"],
-      "image/jpeg": [".jpg", ".jpeg"],
-      "image/gif": [".gif"],
-    };
-    if (!(expectedExt[input.mime] ?? []).includes(ext)) {
-      return { ok: false, code: "invalid", message: `扩展名 ${ext || "(无)"} 与类型 ${input.mime} 不匹配` };
-    }
-    if (input.bytes.byteLength === 0) return { ok: false, code: "invalid", message: "图片为空" };
-    if (input.bytes.byteLength > MAX_IMAGE_BYTES) {
-      return { ok: false, code: "invalid", message: "图片超过 800KB" };
-    }
+    const verdict = validateImage(input.name, input.mime, input.bytes.byteLength);
+    if (!verdict.ok) return { ok: false, code: "invalid", message: verdict.message };
 
     const tree = await this.client.tree();
     if (tree.truncated) {
       return { ok: false, code: "invalid", message: "仓库文件目录过大导致列表被截断，暂不能上传" };
     }
+    const { meta, sha: metaSha } = await this.readMetaStrictForWrite(tree.entries);
+    const metaInfo = meta.pages[contentPath] ?? {};
+    const acl = Array.isArray(metaInfo.acl) && metaInfo.acl.length > 0 ? metaInfo.acl : [...DEFAULT_ACL];
+    void metaSha;
+    if (input.actor.role !== "admin" && !acl.includes(input.actor.role)) {
+      return { ok: false, code: "forbidden", message: "当前账号无权编辑本页，不能上传图片" };
+    }
+
     const id = pageId(contentPath);
     const name = safeName(input.name);
     const repoPath = `assets/${id}/${name}`;

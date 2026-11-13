@@ -143,7 +143,7 @@ data/
 - 编辑者 editor：可编辑 ACL 允许的页面，不能还原 admin-only 页面
 - 读者 viewer：只读，写接口返回 403 `forbidden`
 
-M1 的 `mock_role` Cookie 已在 M2 删除，仓库里只剩一行说明注释；任何可伪造角色的入口都不再存在。
+M1 那种按 Cookie 直读角色、可被随意伪造的登录方式已在 M2 整体删除，代码里不再有它的读写逻辑。
 
 图片走 `POST /api/upload`（原始二进制，≤800KB），正文只带图片 URL，不再把 base64 塞进保存请求。
 

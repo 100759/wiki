@@ -4,6 +4,7 @@ import path from "node:path";
 import { GithubClient } from "./github";
 import { GithubStore } from "./gitstore";
 import { guessTitle, normalizeContentPath, pageId } from "./ids";
+import { validateImage } from "./image-rules";
 
 /* ------------------------------------------------------------------ *
  * v2 §3.1 契约：M2 只新增 githubStore / blobStore，调用方不改。
@@ -530,10 +531,8 @@ export class LocalFileStore implements ContentStore {
     } catch (err) {
       return { ok: false, code: "invalid", message: (err as Error).message };
     }
-    if (input.bytes.byteLength === 0) return { ok: false, code: "invalid", message: "图片为空" };
-    if (input.bytes.byteLength > 800 * 1024) {
-      return { ok: false, code: "invalid", message: "图片超过 800KB" };
-    }
+    const verdict = validateImage(input.name, input.mime, input.bytes.byteLength);
+    if (!verdict.ok) return { ok: false, code: "invalid", message: verdict.message };
     const id = pageId(contentPath);
     const name = safeName(input.name);
     const dir = path.join(this.uploadsDir, id);

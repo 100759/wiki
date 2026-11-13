@@ -184,7 +184,13 @@ const TREE_TTL_MS = 10_000;
 export class GithubClient {
   readonly config: GithubConfig;
   private readonly transport: Transport;
-  private treeCache: { at: number; ref: string; sha: string; entries: Map<string, TreeEntry> } | null = null;
+  private treeCache: {
+    at: number;
+    ref: string;
+    sha: string;
+    entries: Map<string, TreeEntry>;
+    truncated: boolean;
+  } | null = null;
   private readonly blobCache = new Map<string, string>();
 
   constructor(config: GithubConfig, transport: Transport = nodeTransport) {
@@ -242,7 +248,11 @@ export class GithubClient {
     const target = ref ?? (await this.headSha());
     const now = Date.now();
     if (!ref && this.treeCache && this.treeCache.ref === target && now - this.treeCache.at < TREE_TTL_MS) {
-      return { sha: this.treeCache.sha, entries: this.treeCache.entries, truncated: false };
+      return {
+        sha: this.treeCache.sha,
+        entries: this.treeCache.entries,
+        truncated: this.treeCache.truncated,
+      };
     }
     const { json } = await this.call(
       "GET",
@@ -253,8 +263,9 @@ export class GithubClient {
     for (const entry of data?.tree ?? []) {
       if (entry && typeof entry.path === "string") entries.set(entry.path, entry);
     }
+    const truncated = Boolean(data?.truncated);
     if (!ref) {
-      this.treeCache = { at: now, ref: target, sha: data?.sha ?? target, entries };
+      this.treeCache = { at: now, ref: target, sha: data?.sha ?? target, entries, truncated };
     }
     return { sha: data?.sha ?? target, entries, truncated: Boolean(data?.truncated) };
   }

@@ -285,10 +285,15 @@ function testRateLimit(): void {
   ok("锁定期内即使换 IP 也被账号维度挡住", !checkRateLimit("9.9.9.9", "bob", now).allowed);
   ok("15 分钟后解锁", checkRateLimit("1.2.3.4", "bob", now + 16 * 60 * 1000).allowed);
 
-  // 换用户名绕限流：同一 IP 累计失败到阈值后整体锁定
+  // 单账号锁定不影响同 IP 的其他账号（共享出口 IP 不该被误伤）
   resetRateLimits();
-  for (let i = 0; i < 30; i += 1) recordFailure("7.7.7.7", `u${i}`, now);
-  ok("同 IP 换名也受限", !checkRateLimit("7.7.7.7", "fresh-name", now).allowed);
+  for (let i = 0; i < 5; i += 1) recordFailure("7.7.7.7", "bob", now);
+  ok("同 IP 的其他账号仍可登录", checkRateLimit("7.7.7.7", "carol", now).allowed);
+
+  // 换用户名硬刷：同 IP 累计到阈值后整体锁定
+  resetRateLimits();
+  for (let i = 0; i < 20; i += 1) recordFailure("7.7.7.7", `u${i}`, now);
+  ok("同 IP 换名刷到阈值后被锁", !checkRateLimit("7.7.7.7", "fresh-name", now).allowed);
   resetRateLimits();
 }
 
@@ -461,6 +466,18 @@ async function testStore(): Promise<void> {
     role: "editor",
   });
   ok("editor 不能还原 admin-only 页", !editorRestore.ok && editorRestore.code === "forbidden");
+
+  // 本地实现必须用同一套规则（工部 R2：只有 GitHub 实现校验属假绿）
+  const { LocalFileStore } = await import("../src/lib/storage");
+  const local = new LocalFileStore("/private/var/folders/27/fmhxq5jj63l_bfmvccc7ghsh0000gn/T/opencode/m2local");
+  const localSvg = await local.uploadImage({
+    pagePath: "content/a.md",
+    name: "x.svg",
+    mime: "image/png",
+    bytes: new Uint8Array([1, 2, 3]),
+    actor: { uid: "u2", name: "李四", role: "admin" },
+  });
+  ok("本地实现也校验类型与扩展名", !localSvg.ok, JSON.stringify(localSvg));
 
   const viewerUpload = await store.uploadImage({
     pagePath: "content/pic.md",
