@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "pages": {
+    "content/_m2-selftest.md": {
+      "title": "M2 自检页",
+      "order": 100,
+      "acl": [
+        "admin",
+        "editor"
+      ],
+      "updatedAt": "2026-11-13T08:14:29.095Z",
+      "updatedBy": "自检机器人"
+    }
+  }
+}
