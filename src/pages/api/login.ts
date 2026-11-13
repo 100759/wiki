@@ -79,8 +79,14 @@ export const POST: APIRoute = async ({ request }) => {
       const created = await makeUser("admin", passwordEnv, "admin");
       try {
         await repo.save([created], "chore(users): 初始化管理员");
-      } catch {
-        return json({ ok: false, code: "unavailable", message: "初始化管理员失败，请稍后再试" }, 503);
+      } catch (err) {
+        // 只回粗粒度原因（GitHub 状态码），不带 token、不带堆栈。
+        const status = (err as { status?: number }).status;
+        const reason = typeof status === "number" && status > 0 ? `github_${status}` : "storage_error";
+        return json(
+          { ok: false, code: "unavailable", message: "初始化管理员失败，请稍后再试", reason },
+          503,
+        );
       }
       user = created;
     }
