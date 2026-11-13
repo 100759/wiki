@@ -129,7 +129,7 @@ const updated = new Date(page.updatedAt);
 
   {
     canEdit && (
-      <script define:vars={{ contentPath }} is:inline>
+      <script define:vars={{ contentPath }} is:inline data-astro-rerun>
         async function callPages(payload) {
           const response = await fetch("/api/pages", {
             method: "POST",

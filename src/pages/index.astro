@@ -81,7 +81,7 @@ for (const page of pages) {
 
   {
     canEdit && (
-      <script is:inline>
+      <script is:inline data-astro-rerun>
         document.getElementById("new-page")?.addEventListener("click", async function () {
           const path = window.prompt("新页面路径（例如 content/guide/faq.md）", "content/new-page.md");
           if (!path) return;

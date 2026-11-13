@@ -190,3 +190,19 @@ body {
   pointer-events: none;
   height: 0;
 }
+
+/* 客户端路由的换页过渡：短淡入，避免整页重载的闪烁 */
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(root) {
+    animation: 120ms ease-out both fade-out;
+  }
+  ::view-transition-new(root) {
+    animation: 160ms ease-in both fade-in;
+  }
+}
+@keyframes fade-out {
+  to { opacity: 0; }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+}

@@ -87,7 +87,7 @@ const users = await getUserRepository().load();
     </form>
   </div>
 
-  <script is:inline>
+  <script is:inline data-astro-rerun>
     const msg = document.getElementById("admin-msg");
     function show(text, ok) {
       msg.textContent = text;

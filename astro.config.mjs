@@ -11,5 +11,7 @@ export default defineConfig({
   build: { inlineStylesheets: "never" },
   adapter: edgeone(),
   integrations: [react(), tailwind({ applyBaseStyles: false })],
+  // 悬停即预取，点开时直接换页
+  prefetch: { prefetchAll: true, defaultStrategy: "hover" },
   server: { port: 4321 },
 });

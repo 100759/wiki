@@ -53,7 +53,7 @@ const safeNext = next.startsWith("/") && !next.startsWith("//") ? next : "/";
     </p>
   </div>
 
-  <script define:vars={{ safeNext }} is:inline>
+  <script define:vars={{ safeNext }} is:inline data-astro-rerun>
     const form = document.getElementById("login-form");
     const errorBox = document.getElementById("login-error");
     form?.addEventListener("submit", async function (event) {

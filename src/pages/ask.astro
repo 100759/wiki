@@ -48,7 +48,7 @@ const q = Astro.url.searchParams.get("q") ?? "";
     <p id="ask-error" class="mt-4 hidden rounded-md bg-red-50 px-3 py-2 text-sm text-red-700"></p>
   </div>
 
-  <script define:vars={{ path }} is:inline>
+  <script define:vars={{ path }} is:inline data-astro-rerun>
     const form = document.getElementById("ask-form");
     const box = document.getElementById("answer");
     const text = document.getElementById("answer-text");
