@@ -1,4 +1,13 @@
 {
   "version": 1,
-  "users": []
+  "users": [
+    {
+      "uid": "u-61646d696e",
+      "name": "admin",
+      "role": "admin",
+      "salt": "GjuWz03W8VLGTzB8i3ohDw==",
+      "hash": "Jktmmw6PPQOb/v12LV6VxoRffr9Y9/yjLQiXAHQozdM=",
+      "iterations": 600000
+    }
+  ]
 }
