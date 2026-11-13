@@ -55,6 +55,7 @@ class FakeGithub {
   interleave: { path: string; content: string } | null = null;
   /** 下一次 updateRef 直接拒绝一次，用于测 422 重试。 */
   raceOnce = false;
+  failMetaBlobOnce = false;
   raceMeta = false;
   interleaveMeta = false;
   blobs = new Map<string, Buffer>();
@@ -114,6 +115,11 @@ class FakeGithub {
 
     if (method === "GET" && path.startsWith("/git/blobs/")) {
       const sha = path.slice("/git/blobs/".length);
+      const metaEntry = this.files.get("_system/meta.json");
+      if (this.failMetaBlobOnce && metaEntry && metaEntry.sha === sha) {
+        this.failMetaBlobOnce = false;
+        return respond({ message: "Server Error" }, 500);
+      }
       for (const file of this.files.values()) {
         if (file.sha === sha) {
           return respond({ sha, encoding: "base64", content: file.content.toString("base64") });
@@ -367,6 +373,36 @@ async function testStore(): Promise<void> {
   ok("正文图片路径改写为 /img/assets/", (pic?.markdown ?? "").includes("/img/assets/"));
   ok("仓库里落到 assets/", [...fake.files.keys()].some((p) => p.startsWith("assets/")));
 
+  // meta 读取失败时必须整体失败，不能拿空表覆盖别人的 title/order/ACL。
+  const metaSha = fake.files.get("_system/meta.json")?.sha ?? "";
+  const failTransport = async (req: HttpRequest): Promise<HttpResponse> =>
+    req.method === "GET" && req.url.includes("/git/blobs/") && req.url.endsWith(metaSha)
+      ? { status: 500, body: JSON.stringify({ message: "Server Error" }) }
+      : fake.transport(req);
+  const failClient = new GithubClient(
+    { repo: "o/r", branch: "main", token: "t", proxy: null },
+    failTransport,
+  );
+  const failStore = new GithubStore(failClient);
+  const aboutFile = fake.files.get("content/about.md");
+  const metaFail = await failStore.savePage({
+    path: "content/about.md",
+    title: "关于",
+    markdown: "# 关于\n\nmeta 读失败时的写入。\n",
+    baseSha: aboutFile?.sha ?? null,
+    images: [],
+    actor: { uid: "u2", name: "李四", role: "admin" },
+  });
+  ok("meta 读失败时保存整体失败", !metaFail.ok, JSON.stringify(metaFail));
+  const afterMeta = JSON.parse(fake.files.get("_system/meta.json")?.content.toString("utf8") ?? "{}") as {
+    pages: Record<string, { acl?: string[] }>;
+  };
+  ok(
+    "meta 读失败后仓库里的 meta 未被改动",
+    (fake.files.get("_system/meta.json")?.sha ?? "") === metaSha &&
+      Object.keys(afterMeta.pages).length > 0,
+  );
+
   const bigImage = await store.savePage({
     path: "content/big.md",
     title: "大图",
@@ -414,6 +450,7 @@ async function testCommitFiles(): Promise<void> {
     expected: { "content/dup.md": null },
   });
   ok("新建页重复提交判定为已成功", replay.ok, JSON.stringify(replay));
+  ok("已落地分支回传真实 blob sha", replay.ok && /^[0-9a-f]{40}$/.test(replay.blobs["content/dup.md"] ?? ""));
 }
 
 async function main(): Promise<void> {

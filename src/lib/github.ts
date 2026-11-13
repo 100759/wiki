@@ -263,6 +263,11 @@ export class GithubClient {
     this.treeCache = null;
   }
 
+  /** 仅自测使用：清空 blob 缓存，验证读失败路径。 */
+  clearBlobCache(): void {
+    this.blobCache.clear();
+  }
+
   async readFileAt(path: string, ref: string): Promise<GithubFile | null> {
     let status = 0;
     try {

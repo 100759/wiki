@@ -75,7 +75,8 @@ export async function commitFiles(client: GithubClient, plan: CommitPlan): Promi
       // 注意 want 为 null（新建页）时同样成立，不能只在 want !== null 时判断。
       if (ours && gitBlobSha(ours) === actual) {
         const commits = await client.history(path, 1);
-        return { ok: true, commit: commits[0]?.sha ?? "", blobs: {} };
+        // 回传真实 blob sha：savePage 会把它当作新基线，返回空串会让下次保存误判冲突。
+        return { ok: true, commit: commits[0]?.sha ?? "", blobs: { [path]: actual } };
       }
       return { ok: false, code: "conflict", path };
     }

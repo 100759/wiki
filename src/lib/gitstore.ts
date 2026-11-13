@@ -36,6 +36,15 @@ interface MetaFile {
   pages: Record<string, PageMeta>;
 }
 
+/** 写路径专用：结构不合法直接抛错，绝不用空表覆盖线上 meta。 */
+function parseMetaStrict(raw: string): MetaFile {
+  const parsed = JSON.parse(raw) as Partial<MetaFile>;
+  if (!parsed || typeof parsed !== "object" || !parsed.pages || typeof parsed.pages !== "object") {
+    throw new Error("meta.json 结构不合法，拒绝覆盖");
+  }
+  return { version: 1, pages: parsed.pages as Record<string, PageMeta> };
+}
+
 function parseMeta(raw: string): MetaFile {
   try {
     const parsed = JSON.parse(raw) as Partial<MetaFile>;
@@ -293,14 +302,12 @@ export class GithubStore implements ContentStore {
     files.push({
       path: META_PATH,
       content: async (ctx) => {
+        // 只有"文件本来就不存在"才允许用空表起步；
+        // 存在但读不到/解析不了时直接抛错，避免把其他页的标题、排序、ACL 抹掉。
         let base: MetaFile = { version: 1, pages: {} };
         const entry = ctx.entries.get(META_PATH);
         if (entry) {
-          try {
-            base = parseMeta(await ctx.client.readBlob(entry.sha));
-          } catch {
-            base = { version: 1, pages: {} };
-          }
+          base = parseMetaStrict(await ctx.client.readBlob(entry.sha));
         }
         const previous = base.pages[contentPath] ?? {};
         const next: MetaFile = {
