@@ -1,39 +1,90 @@
 ---
 import Base from "../layouts/Base.astro";
-import { searchPages } from "../lib/search";
-import { setPageCache } from "../lib/cache";
-import { getStore } from "../lib/storage";
 
-export const prerender = false;
-
-const q = (Astro.url.searchParams.get("q") ?? "").trim();
-const hits = q ? await searchPages(getStore(), q) : [];
-setPageCache(Astro.cookies, Astro.response.headers, { maxAge: 60, swr: 600 });
+export const prerender = true;
 ---
 
-<Base title={q ? `搜索：${q}` : "搜索"} sidebar={false}>
-  <div class="mb-5">
-    <h1 class="text-[1.9rem] font-light leading-tight tracking-tight">{q ? `搜索“${q}”` : "搜索"}</h1>
-    <p class="mt-1 text-sm text-graphite">共 {hits.length} 条结果，匹配标题与正文。</p>
+<Base title="搜索" sidebar={false}>
+  <div class="mx-auto max-w-content py-16">
+    <h1 class="text-[1.9rem] font-light leading-tight tracking-tight">搜索</h1>
+    <form id="search-form" class="mt-6 flex gap-2">
+      <input
+        id="search-input"
+        type="search"
+        name="q"
+        placeholder="输入关键词"
+        class="flex-1 border-0 border-b border-hairline bg-transparent px-0 py-2 text-[15px] text-ink outline-none focus:border-ink"
+      />
+      <button
+        type="submit"
+        class="border border-ink bg-ink px-4 py-2 text-[12px] uppercase tracking-label text-paper transition-colors hover:bg-paper hover:text-ink"
+      >
+        搜索
+      </button>
+    </form>
+
+    <p id="search-count" class="label mt-6"></p>
+    <ul id="search-results" class="mt-4"></ul>
+    <p id="search-empty" hidden class="border-t border-hairline py-10 text-[13px] text-stone-400"></p>
   </div>
 
-  {
-    hits.length === 0 ? (
-      <p class="rounded-lg border border-dashed border-stone-300 p-8 text-center text-graphite">
-        {q ? "没有找到匹配的内容，换个关键词试试。" : "在上方输入关键词。"}
-      </p>
-    ) : (
-      <ul class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
-        {hits.map((hit) => (
-          <li class="px-4 py-3">
-            <a href={`/w/${hit.slug}`} class="font-medium hover:text-blue-700">
-              {hit.title}
-            </a>
-            <p class="mt-1 text-sm text-graphite">{hit.snippet}</p>
-            <p class="mt-1 text-[11px] text-stone-400">{hit.path}</p>
-          </li>
-        ))}
-      </ul>
-    )
-  }
+  <script is:inline data-astro-rerun>
+    (function () {
+      var form = document.getElementById("search-form");
+      var input = document.getElementById("search-input");
+      var list = document.getElementById("search-results");
+      var count = document.getElementById("search-count");
+      var empty = document.getElementById("search-empty");
+      if (!form || !input || !list) return;
+
+      function escape(text) {
+        var div = document.createElement("div");
+        div.textContent = text == null ? "" : String(text);
+        return div.innerHTML;
+      }
+
+      async function run(query) {
+        if (!query) return;
+        input.value = query;
+        count.textContent = "搜索中…";
+        list.innerHTML = "";
+        empty.hidden = true;
+        try {
+          var response = await fetch("/api/search?q=" + encodeURIComponent(query));
+          var data = await response.json();
+          var hits = data.hits || [];
+          count.textContent = "共 " + hits.length + " 条结果";
+          if (!hits.length) {
+            empty.textContent = "没有找到匹配的内容，换个关键词试试。";
+            empty.hidden = false;
+            return;
+          }
+          list.innerHTML = hits
+            .map(function (hit) {
+              return (
+                '<li class="border-b border-hairline py-4">' +
+                '<a href="/w/' + hit.slug + '" class="text-[15px] text-ink hover:underline">' + escape(hit.title) + "</a>" +
+                '<p class="mt-1 text-[13px] text-graphite">' + escape(hit.snippet) + "</p>" +
+                '<p class="label mt-1">' + escape(hit.path) + "</p>" +
+                "</li>"
+              );
+            })
+            .join("");
+        } catch (err) {
+          count.textContent = "搜索失败：" + (err && err.message ? err.message : "网络异常");
+        }
+      }
+
+      form.addEventListener("submit", function (event) {
+        event.preventDefault();
+        var query = input.value.trim();
+        if (!query) return;
+        history.replaceState(null, "", "/search?q=" + encodeURIComponent(query));
+        run(query);
+      });
+
+      var initial = new URLSearchParams(location.search).get("q");
+      if (initial) run(initial);
+    })();
+  </script>
 </Base>

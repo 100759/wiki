@@ -1,17 +1,13 @@
 ---
 import Base from "../layouts/Base.astro";
+import { buildNav } from "../lib/nav";
+import { readLocalPages } from "../lib/content-fs";
 import { pathToSlug } from "../lib/ids";
-import { getSession } from "../lib/session";
-import { setPageCache } from "../lib/cache";
-import { getStore } from "../lib/storage";
 
-export const prerender = false;
-setPageCache(Astro.cookies, Astro.response.headers, { maxAge: 180, swr: 1800 });
+export const prerender = true;
 
-const store = getStore();
-const pages = await store.listPages();
-const session = getSession(Astro.cookies);
-const canEdit = Boolean(session && session.role !== "viewer");
+const pages = await readLocalPages();
+const nav = buildNav(pages);
 
 const groups = new Map<string, typeof pages>();
 for (const page of pages) {
@@ -23,28 +19,24 @@ for (const page of pages) {
 }
 ---
 
-<Base title="全部页面" sidebar={false}>
+<Base title="全部页面" sidebar={false} nav={nav}>
   <section class="mx-auto max-w-content pb-12 pt-20">
     <h1 class="text-[2.8rem] font-light leading-[1.1] tracking-tight text-ink">所有页面</h1>
     <div class="mt-4 flex flex-wrap items-center gap-4">
       <p class="text-[13px] text-graphite">{pages.length} 个页面 · 读免登录，改要登录</p>
-      {
-        canEdit && (
-          <button
-            type="button"
-            id="new-page"
-            class="border border-ink px-4 py-1.5 text-[12px] uppercase tracking-label text-ink transition-colors hover:bg-ink hover:text-paper"
-          >
-            新建页面
-          </button>
-        )
-      }
+      <button
+        type="button"
+        id="new-page"
+        class="border border-ink px-4 py-1.5 text-[12px] uppercase tracking-label text-ink transition-colors hover:bg-ink hover:text-paper"
+      >
+        新建页面
+      </button>
     </div>
   </section>
 
   {
     pages.length === 0 ? (
-      <p class="max-w-content border-t border-hairline py-16 text-[13px] text-stone-400">
+      <p class="mx-auto max-w-content border-t border-hairline py-16 text-[13px] text-stone-400">
         还没有页面。登录后点“新建页面”开始。
       </p>
     ) : (
@@ -62,14 +54,12 @@ for (const page of pages) {
                     {page.title}
                   </a>
                   <span class="label ml-auto hidden truncate sm:block">{page.path}</span>
-                  {canEdit && (
-                    <a
-                      href={`/edit?path=${encodeURIComponent(page.path)}`}
-                      class="text-[12px] text-graphite transition-colors hover:text-ink"
-                    >
-                      编辑
-                    </a>
-                  )}
+                  <a
+                    href={`/edit?path=${encodeURIComponent(page.path)}`}
+                    class="text-[12px] text-graphite transition-colors hover:text-ink"
+                  >
+                    编辑
+                  </a>
                 </li>
               ))}
             </ul>
@@ -79,23 +69,21 @@ for (const page of pages) {
     )
   }
 
-  {
-    canEdit && (
-      <script is:inline data-astro-rerun>
-        document.getElementById("new-page")?.addEventListener("click", async function () {
-          const path = window.prompt("新页面路径（例如 content/guide/faq.md）", "content/new-page.md");
-          if (!path) return;
-          const title = window.prompt("页面标题", "新页面") || "新页面";
-          const response = await fetch("/api/pages", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ action: "create", path, title }),
-          });
-          const result = await response.json();
-          if (result.ok) location.href = "/edit?path=" + encodeURIComponent(path);
-          else window.alert(result.message || "创建失败");
-        });
-      </script>
-    )
-  }
+  <script is:inline data-astro-rerun>
+    document.getElementById("new-page")?.addEventListener("click", async function () {
+      const path = window.prompt("新页面路径（例如 content/guide/faq.md）", "content/new-page.md");
+      if (!path) return;
+      const title = window.prompt("页面标题", "新页面") || "新页面";
+      const response = await fetch("/api/pages", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "create", path, title }),
+      });
+      const result = await response.json();
+      if (result.ok) {
+        window.alert("已创建，站点正在重建（约 3–5 分钟），构建完成后可访问。");
+        location.href = "/edit?path=" + encodeURIComponent(path);
+      } else window.alert(result.message || "创建失败");
+    });
+  </script>
 </Base>

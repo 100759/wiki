@@ -1,51 +1,43 @@
 ---
 import Base from "../../layouts/Base.astro";
-import { pathToSlug, slugToPath } from "../../lib/ids";
-import { neighbours } from "../../lib/nav";
+import type { NavItem } from "../../lib/nav";
+import { buildNav, neighbours } from "../../lib/nav";
+import { readLocalPage, readLocalPages } from "../../lib/content-fs";
+import { pathToSlug } from "../../lib/ids";
 import { renderPage, stripLeadingTitle } from "../../lib/render";
-import { getSession } from "../../lib/session";
-import { getStore } from "../../lib/storage";
+import type { PageSummary } from "../../lib/storage";
 
-export const prerender = false;
+export const prerender = true;
 
-const slug = Astro.params.slug ?? "";
-const contentPath = slugToPath(slug);
-if (!contentPath) {
-  return new Response("Not found", { status: 404 });
+export async function getStaticPaths() {
+  const pages = await readLocalPages();
+  const nav: NavItem[] = buildNav(pages);
+  return pages.map((summary: PageSummary) => ({
+    params: { slug: pathToSlug(summary.path) },
+    props: { summary, nav, pages },
+  }));
 }
 
-const store = getStore();
-const page = await store.getPageByPath(contentPath);
+const { summary, nav, pages } = Astro.props as {
+  summary: PageSummary;
+  nav: NavItem[];
+  pages: PageSummary[];
+};
+
+const page = await readLocalPage(summary.path);
 if (!page) {
   return new Response("Not found", { status: 404 });
 }
 
-const etag = `"${page.sha}"`;
-const loggedIn = Boolean(getSession(Astro.cookies));
-const cacheControl = loggedIn
-  ? "private, max-age=15"
-  : "public, max-age=30, s-maxage=120, stale-while-revalidate=1800";
-const headers = new Headers({ "Cache-Control": cacheControl, ETag: etag });
-
-const ifNoneMatch = Astro.request.headers.get("if-none-match");
-if (ifNoneMatch && ifNoneMatch.split(",").some((tag) => tag.trim() === etag)) {
-  return new Response(null, { status: 304, headers });
-}
-
-Astro.response.headers.set("Cache-Control", headers.get("Cache-Control")!);
-Astro.response.headers.set("ETag", etag);
-
 const { html, toc } = renderPage(stripLeadingTitle(page.markdown, page.title));
-const session = getSession(Astro.cookies);
-const canEdit = Boolean(session && session.role !== "viewer");
-const { prev, next } = neighbours(await store.listPages(), page.path);
+const { prev, next } = neighbours(pages, page.path);
 
 const rel = page.path.replace(/^content\//, "").replace(/\.md$/, "");
 const crumbs = rel === "index" ? [] : rel.split("/").slice(0, -1);
 const updated = new Date(page.updatedAt);
 ---
 
-<Base title={page.title} activePath={page.path}>
+<Base title={page.title} activePath={page.path} nav={nav}>
   <article class="max-w-content py-10">
     <nav class="flex flex-wrap items-center gap-2">
       <span class="label">Wiki</span>
@@ -65,23 +57,17 @@ const updated = new Date(page.updatedAt);
           ? "内置页面"
           : `更新于 ${updated.toLocaleDateString("zh-CN")}`}
       </span>
-      {canEdit && (
-        <span class="flex items-center gap-4 text-[12px] text-graphite">
-          <a href={`/edit?path=${encodeURIComponent(page.path)}`} class="transition-colors hover:text-ink">
-            编辑
-          </a>
-          <a
-            href={`/ask?path=${encodeURIComponent(page.path)}`}
-            class="transition-colors hover:text-ink"
-          >
-            问 AI
-          </a>
-          <button type="button" data-rename class="transition-colors hover:text-ink">重命名</button>
-          <button type="button" data-delete class="text-stone-400 transition-colors hover:text-red-600">
-            删除
-          </button>
-        </span>
-      )}
+      <span class="flex items-center gap-4 text-[12px] text-graphite">
+        <a href={`/edit?path=${encodeURIComponent(page.path)}`} class="transition-colors hover:text-ink">
+          编辑
+        </a>
+        <a href={`/ask?path=${encodeURIComponent(page.path)}`} class="transition-colors hover:text-ink">
+          问 AI
+        </a>
+      </span>
+      <span id="saved-notice" hidden class="rounded bg-mist px-2 py-1 text-[11px] text-graphite">
+        内容已保存，站点正在重建，几分钟后这里会更新
+      </span>
     </div>
 
     {
@@ -127,34 +113,11 @@ const updated = new Date(page.updatedAt);
     </nav>
   </article>
 
-  {
-    canEdit && (
-      <script define:vars={{ contentPath }} is:inline data-astro-rerun>
-        async function callPages(payload) {
-          const response = await fetch("/api/pages", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-          return response.json();
-        }
-        document.querySelector("[data-rename]")?.addEventListener("click", async function () {
-          const target = window.prompt("新的路径（例如 content/guide/start.md）", contentPath);
-          if (!target || target === contentPath) return;
-          const result = await callPages({ action: "rename", path: contentPath, to: target });
-          if (result.ok) {
-            location.href = "/w/" + target.replace(/^content\//, "").replace(/\.md$/, "").split("/").join(".");
-          } else {
-            window.alert(result.message || "重命名失败");
-          }
-        });
-        document.querySelector("[data-delete]")?.addEventListener("click", async function () {
-          if (!window.confirm("删除这一页？删除会生成一次提交，可从 Git 历史找回。")) return;
-          const result = await callPages({ action: "delete", path: contentPath });
-          if (result.ok) location.href = "/";
-          else window.alert(result.message || "删除失败");
-        });
-      </script>
-    )
-  }
+  <script is:inline data-astro-rerun>
+    (function () {
+      if (location.search.indexOf("saved=1") < 0) return;
+      var notice = document.getElementById("saved-notice");
+      if (notice) notice.hidden = false;
+    })();
+  </script>
 </Base>

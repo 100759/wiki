@@ -228,8 +228,8 @@ export default function Editor({ initial, user, history }: Props) {
 
       if (response.ok && data.ok) {
         setDirty(false);
-        setStatus({ kind: "ok", text: "已保存，正在打开阅读页……" });
-        window.location.assign(`/w/${slugOf(initial.path)}?fresh=${Date.now()}`);
+        setStatus({ kind: "ok", text: "已保存，站点正在重建（约 3–5 分钟）……" });
+        window.location.assign(`/w/${slugOf(initial.path)}?saved=1`);
         return;
       }
 
