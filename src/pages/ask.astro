@@ -1,0 +1,102 @@
+---
+import Base from "../layouts/Base.astro";
+import { getSession } from "../lib/session";
+
+export const prerender = false;
+
+const session = getSession(Astro.cookies);
+const path = Astro.url.searchParams.get("path") ?? "";
+const q = Astro.url.searchParams.get("q") ?? "";
+---
+
+<Base title="问 AI" sidebar={false}>
+  <div class="mx-auto max-w-2xl">
+    <h1 class="text-xl font-bold">站内 AI 问答</h1>
+    <p class="mt-1 text-sm text-stone-500">
+      只根据站内已有内容回答，答不出来会直接说，不会编。
+    </p>
+
+    {
+      !session && (
+        <p class="mt-4 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          问答需要登录（防止被刷额度）。<a href="/login" class="underline">去登录</a>
+        </p>
+      )
+    }
+
+    <form id="ask-form" class="mt-5 flex gap-2">
+      <input
+        name="q"
+        value={q}
+        placeholder="例如：怎么新建一个页面？"
+        required
+        minlength="2"
+        class="flex-1 rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-ink"
+      />
+      <button
+        type="submit"
+        class="rounded-md bg-ink px-4 py-2 text-sm text-white hover:bg-black disabled:opacity-60"
+      >
+        提问
+      </button>
+    </form>
+
+    <div id="answer" class="mt-6 hidden rounded-lg border border-stone-200 bg-white p-5">
+      <div id="answer-text" class="wiki-prose text-sm whitespace-pre-wrap"></div>
+      <div id="answer-sources" class="mt-4 border-t border-stone-100 pt-3 text-xs text-stone-500"></div>
+    </div>
+    <p id="ask-error" class="mt-4 hidden rounded-md bg-red-50 px-3 py-2 text-sm text-red-700"></p>
+  </div>
+
+  <script define:vars={{ path }} is:inline>
+    const form = document.getElementById("ask-form");
+    const box = document.getElementById("answer");
+    const text = document.getElementById("answer-text");
+    const sources = document.getElementById("answer-sources");
+    const error = document.getElementById("ask-error");
+
+    form?.addEventListener("submit", async function (event) {
+      event.preventDefault();
+      error.classList.add("hidden");
+      box.classList.add("hidden");
+      const button = form.querySelector("button");
+      button.disabled = true;
+      button.textContent = "思考中…";
+      try {
+        const response = await fetch("/api/ask", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ q: new FormData(form).get("q"), path }),
+        });
+        const data = await response.json();
+        if (!data.ok) {
+          error.textContent = data.message || "提问失败";
+          error.classList.remove("hidden");
+          return;
+        }
+        text.textContent = data.answer;
+        sources.innerHTML = "";
+        if (data.sources?.length) {
+          const label = document.createElement("span");
+          label.textContent = "来源：";
+          sources.appendChild(label);
+          data.sources.forEach(function (item, index) {
+            const link = document.createElement("a");
+            link.href = "/w/" + item.slug;
+            link.className = "underline hover:text-ink";
+            link.textContent = "【" + (index + 1) + "】" + item.title;
+            sources.appendChild(link);
+            if (index < data.sources.length - 1) sources.appendChild(document.createTextNode(" "));
+          });
+        }
+        box.classList.remove("hidden");
+      } catch (err) {
+        error.textContent = "网络异常：" + err.message;
+        error.classList.remove("hidden");
+      } finally {
+        button.disabled = false;
+        button.textContent = "提问";
+      }
+    });
+  </script>
+</Base>

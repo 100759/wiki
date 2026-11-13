@@ -563,12 +563,43 @@ async function testManage(): Promise<void> {
   ok("无匹配返回空", none.length === 0);
 }
 
+async function testAi(): Promise<void> {
+  console.log("\n[6] AI 问答");
+  const { aiConfig, chat } = await import("../src/lib/ai");
+
+  delete process.env.MAKERS_MODELS_KEY;
+  delete process.env.AI_API_KEY;
+  ok("无密钥时返回 not_configured", (await chat([{ role: "user", content: "hi" }])).ok === false);
+
+  process.env.MAKERS_MODELS_KEY = "test-key";
+  const config = aiConfig();
+  ok("默认网关地址正确", config?.baseUrl === "https://ai-gateway.edgeone.link/v1");
+  ok("默认模型正确", config?.model === "@makers/deepseek-v4-flash");
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async () =>
+    new Response(JSON.stringify({ choices: [{ message: { content: "  只根据资料回答  " } }] }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    })) as typeof fetch;
+  const good = await chat([{ role: "user", content: "q" }]);
+  ok("正常返回并去空白", good.ok && good.text === "只根据资料回答");
+
+  globalThis.fetch = (async () => new Response("boom", { status: 500 })) as typeof fetch;
+  const bad = await chat([{ role: "user", content: "q" }]);
+  ok("上游 500 归类为 upstream", !bad.ok && bad.code === "upstream");
+
+  globalThis.fetch = originalFetch;
+  delete process.env.MAKERS_MODELS_KEY;
+}
+
 async function main(): Promise<void> {
   await testAuth();
   testRateLimit();
   await testStore();
   await testCommitFiles();
   await testManage();
+  await testAi();
   console.log(`\n结果：${passed} 通过 / ${failed} 失败`);
   if (failed > 0) process.exit(1);
 }

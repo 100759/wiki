@@ -67,6 +67,12 @@ const updated = new Date(page.updatedAt);
             >
               编辑
             </a>
+            <a
+              href={`/ask?path=${encodeURIComponent(page.path)}`}
+              class="rounded-md border border-stone-300 px-2 py-1 hover:bg-stone-100"
+            >
+              问 AI
+            </a>
             <button type="button" data-rename class="rounded-md border border-stone-300 px-2 py-1 hover:bg-stone-100">
               重命名
             </button>
