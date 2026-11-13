@@ -22,11 +22,8 @@ for (const page of pages) {
 ---
 
 <Base title="全部页面" sidebar={false}>
-  <section class="max-w-content py-16">
-    <p class="label">共创 Wiki</p>
-    <h1 class="mt-4 text-[2.8rem] font-light leading-[1.1] tracking-tight text-ink">
-      所有页面
-    </h1>
+  <section class="mx-auto max-w-content pb-12 pt-20">
+    <h1 class="text-[2.8rem] font-light leading-[1.1] tracking-tight text-ink">所有页面</h1>
     <div class="mt-4 flex flex-wrap items-center gap-4">
       <p class="text-[13px] text-graphite">{pages.length} 个页面 · 读免登录，改要登录</p>
       {
@@ -49,10 +46,10 @@ for (const page of pages) {
         还没有页面。登录后点“新建页面”开始。
       </p>
     ) : (
-      <div class="max-w-content">
+      <div class="mx-auto max-w-content pb-10">
         {[...groups.entries()].map(([dir, list]) => (
-          <section class="mt-4 first:mt-0">
-            {dir && <p class="label mb-2">{dir}</p>}
+          <section class="mt-10 first:mt-0">
+            {dir && <p class="label mb-3">{dir}</p>}
             <ul class="border-t border-hairline">
               {list.map((page) => (
                 <li class="group flex items-baseline gap-4 border-b border-hairline py-4">
