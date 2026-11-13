@@ -55,6 +55,8 @@ class FakeGithub {
   interleave: { path: string; content: string } | null = null;
   /** 下一次 updateRef 直接拒绝一次，用于测 422 重试。 */
   raceOnce = false;
+  raceMeta = false;
+  interleaveMeta = false;
   blobs = new Map<string, Buffer>();
 
   constructor(seed: Record<string, string>) {
@@ -166,11 +168,22 @@ class FakeGithub {
       if (this.raceOnce) {
         this.raceOnce = false;
         this.interleave = { path: "content/other.md", content: "# 别人改的另一页\n" };
+        if (this.raceMeta) {
+          this.raceMeta = false;
+          this.interleaveMeta = true;
+        }
       }
       if (this.interleave) {
         const { path: p, content } = this.interleave;
         this.interleave = null;
         this.externalCommit(p, content, "concurrent");
+        if (this.interleaveMeta) {
+          this.interleaveMeta = false;
+          const meta = this.files.get("_system/meta.json");
+          const parsed = meta ? (JSON.parse(meta.content.toString("utf8")) as { version: number; pages: Record<string, unknown> }) : { version: 1, pages: {} };
+          parsed.pages["content/other.md"] = { title: "别人改的另一页", order: 100, acl: ["admin"], updatedAt: new Date().toISOString(), updatedBy: "someone-else" };
+          this.externalCommit("_system/meta.json", `${JSON.stringify(parsed, null, 2)}\n`, "concurrent meta");
+        }
         return respond({ message: "Update is not a fast forward" }, 422);
       }
       if ((commit.parents[0] ?? null) !== this.ref) {
@@ -303,6 +316,8 @@ async function testStore(): Promise<void> {
   ok("过期 baseSha 判冲突", !stale.ok && stale.code === "conflict");
 
   const fresh = await store.getPageByPath("content/about.md");
+  // 模拟真实的并发保存：另一个编辑改的是别的页，但同样重写了 _system/meta.json。
+  fake.raceMeta = true;
   fake.raceOnce = true;
   const raced = await store.savePage({
     path: "content/about.md",
@@ -312,7 +327,8 @@ async function testStore(): Promise<void> {
     images: [],
     actor: { uid: "u1", name: "张三", role: "editor" },
   });
-  ok("422 后重试成功（别人改的是别的页）", raced.ok, JSON.stringify(raced));
+  ok("422 后重试成功（别人改的是别的页，且同时重写了 meta）", raced.ok, JSON.stringify(raced));
+  ok("重试后 meta 里两页都在", (fake.files.get("_system/meta.json")?.content.toString("utf8") ?? "").includes("content/other.md") && (fake.files.get("_system/meta.json")?.content.toString("utf8") ?? "").includes("content/about.md"));
 
   const current = await store.getPageByPath("content/about.md");
   fake.externalCommit("content/about.md", "# 关于\n\n别人抢先写了。\n");
@@ -385,6 +401,19 @@ async function testCommitFiles(): Promise<void> {
   });
   ok("多文件单次提交", outcome.ok, JSON.stringify(outcome));
   ok("commit 里同时改了正文", fake.files.get("content/b.md")?.content.toString("utf8") === "# B2\n");
+
+  // 新建页在"自己上一次提交其实已落地、响应丢失"时不能误判冲突（want === null）。
+  await commitFiles(client, {
+    message: "首次写入 dup",
+    files: [{ path: "content/dup.md", content: "# 重复\n" }],
+    expected: { "content/dup.md": null },
+  });
+  const replay = await commitFiles(client, {
+    message: "重复提交同样内容",
+    files: [{ path: "content/dup.md", content: "# 重复\n" }],
+    expected: { "content/dup.md": null },
+  });
+  ok("新建页重复提交判定为已成功", replay.ok, JSON.stringify(replay));
 }
 
 async function main(): Promise<void> {

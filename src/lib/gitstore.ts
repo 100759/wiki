@@ -1,5 +1,5 @@
 import path from "node:path";
-import { commitFiles } from "./gitcommit";
+import { commitFiles, type FileChange } from "./gitcommit";
 import { GithubError, type GithubClient } from "./github";
 import { guessTitle, normalizeContentPath, pageId, pathToSlug } from "./ids";
 import type {
@@ -249,7 +249,7 @@ export class GithubStore implements ContentStore {
       }
     }
 
-    const { meta, sha: metaSha } = await this.readMeta(tree.entries);
+    const { meta } = await this.readMeta(tree.entries);
     const metaInfo = meta.pages[contentPath] ?? {};
     const acl = Array.isArray(metaInfo.acl) && metaInfo.acl.length > 0 ? metaInfo.acl : [...DEFAULT_ACL];
     if (input.actor.role !== "admin" && !acl.includes(input.actor.role)) {
@@ -258,7 +258,7 @@ export class GithubStore implements ContentStore {
 
     const id = pageId(contentPath);
     let markdown = input.markdown;
-    const files: { path: string; content: string | Buffer }[] = [];
+    const files: FileChange[] = [];
 
     for (const image of input.images ?? []) {
       if (!image || typeof image.name !== "string" || !(image.bytes instanceof Uint8Array)) {
@@ -286,27 +286,44 @@ export class GithubStore implements ContentStore {
 
     const now = new Date().toISOString();
     const title = input.title.trim() || guessTitle(contentPath, markdown);
-    const nextMeta: MetaFile = {
-      version: 1,
-      pages: {
-        ...meta.pages,
-        [contentPath]: {
-          title,
-          order: metaInfo.order ?? 100,
-          acl,
-          updatedAt: now,
-          updatedBy: input.actor.name,
-        },
-      },
-    };
 
     files.push({ path: contentPath, content: markdown });
-    files.push({ path: META_PATH, content: `${JSON.stringify(nextMeta, null, 2)}\n` });
+    // meta.json 是共享文件：两个编辑改不同页都会写它。不能进 expected，
+    // 否则"不同页并发"会被误判成冲突；改为每次尝试基于最新 head 重新合并。
+    files.push({
+      path: META_PATH,
+      content: async (ctx) => {
+        let base: MetaFile = { version: 1, pages: {} };
+        const entry = ctx.entries.get(META_PATH);
+        if (entry) {
+          try {
+            base = parseMeta(await ctx.client.readBlob(entry.sha));
+          } catch {
+            base = { version: 1, pages: {} };
+          }
+        }
+        const previous = base.pages[contentPath] ?? {};
+        const next: MetaFile = {
+          version: 1,
+          pages: {
+            ...base.pages,
+            [contentPath]: {
+              title,
+              order: previous.order ?? metaInfo.order ?? 100,
+              acl: previous.acl ?? acl,
+              updatedAt: now,
+              updatedBy: input.actor.name,
+            },
+          },
+        };
+        return `${JSON.stringify(next, null, 2)}\n`;
+      },
+    });
 
     const outcome = await commitFiles(this.client, {
       message: current ? `更新 ${title}（${input.actor.name}）` : `创建 ${title}（${input.actor.name}）`,
       files,
-      expected: { [contentPath]: current, [META_PATH]: metaSha },
+      expected: { [contentPath]: current },
     });
 
     if (!outcome.ok) {
