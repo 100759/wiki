@@ -1,4 +1,15 @@
 {
   "version": 1,
-  "pages": {}
+  "pages": {
+    "content/_race-a.md": {
+      "title": "并发 A",
+      "order": 100,
+      "acl": [
+        "admin",
+        "editor"
+      ],
+      "updatedAt": "2026-11-13T08:22:32.238Z",
+      "updatedBy": "并发自检"
+    }
+  }
 }
