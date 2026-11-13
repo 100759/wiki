@@ -1,0 +1,118 @@
+---
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import { getSession } from "../../lib/session";
+import { getStore } from "../../lib/storage";
+
+export const prerender = false;
+
+const session = getSession(Astro.cookies);
+if (!session) {
+  return Astro.redirect("/admin/login");
+}
+if (session.role === "viewer") {
+  return Astro.redirect("/");
+}
+
+const pages = await getStore().listPages();
+---
+
+<AdminLayout title="页面" active="pages">
+  <div class="flex flex-wrap items-end justify-between gap-4">
+    <div>
+      <h1 class="text-[1.6rem] font-light tracking-tight">页面</h1>
+      <p class="label mt-2">{pages.length} 个页面 · 保存后约 3–5 分钟对外可见</p>
+    </div>
+    <button
+      type="button"
+      id="new-page"
+      class="border border-ink bg-ink px-4 py-2 text-[12px] uppercase tracking-label text-paper transition-colors hover:bg-paper hover:text-ink"
+    >
+      新建页面
+    </button>
+  </div>
+
+  <ul class="mt-8 border-t border-hairline">
+    {
+      pages.map((page) => (
+        <li class="flex flex-wrap items-center gap-3 border-b border-hairline py-4 text-[14px]">
+          <div class="min-w-0 flex-1">
+            <a href={`/w/${page.path.replace(/^content\//, "").replace(/\.md$/, "").split("/").map(encodeURIComponent).join(".")}`} class="hover:underline">
+              {page.title}
+            </a>
+            <p class="label mt-1">{page.path}</p>
+          </div>
+          <a
+            href={`/admin/edit?path=${encodeURIComponent(page.path)}`}
+            class="border border-hairline px-3 py-1 text-[12px] text-graphite transition-colors hover:border-ink hover:text-ink"
+          >
+            编辑
+          </a>
+          <button
+            type="button"
+            data-rename={page.path}
+            class="border border-hairline px-3 py-1 text-[12px] text-graphite transition-colors hover:border-ink hover:text-ink"
+          >
+            重命名
+          </button>
+          <button
+            type="button"
+            data-delete={page.path}
+            class="border border-hairline px-3 py-1 text-[12px] text-stone-400 transition-colors hover:border-red-400 hover:text-red-600"
+          >
+            删除
+          </button>
+        </li>
+      ))
+    }
+  </ul>
+
+  <p id="admin-msg" class="mt-4 hidden rounded bg-mist px-3 py-2 text-[13px] text-graphite"></p>
+
+  <script is:inline data-astro-rerun>
+    (function () {
+      var msg = document.getElementById("admin-msg");
+      function show(text) {
+        if (!msg) return;
+        msg.textContent = text;
+        msg.hidden = false;
+      }
+      async function call(payload) {
+        var response = await fetch("/api/pages", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        return response.json();
+      }
+      document.getElementById("new-page")?.addEventListener("click", async function () {
+        var path = window.prompt("新页面路径（例如 content/guide/faq.md）", "content/new-page.md");
+        if (!path) return;
+        var title = window.prompt("页面标题", "新页面") || "新页面";
+        var result = await call({ action: "create", path: path, title: title });
+        if (result.ok) {
+          show("已创建，站点正在重建（约 3–5 分钟）");
+          location.href = "/admin/edit?path=" + encodeURIComponent(path);
+        } else show(result.message || "创建失败");
+      });
+      document.querySelectorAll("[data-rename]").forEach(function (button) {
+        button.addEventListener("click", async function () {
+          var from = button.dataset.rename;
+          var to = window.prompt("新的路径", from);
+          if (!to || to === from) return;
+          var result = await call({ action: "rename", path: from, to: to });
+          if (result.ok) location.reload();
+          else show(result.message || "重命名失败");
+        });
+      });
+      document.querySelectorAll("[data-delete]").forEach(function (button) {
+        button.addEventListener("click", async function () {
+          var path = button.dataset.delete;
+          if (!window.confirm("删除 " + path + "？会生成一次提交，可从 Git 历史找回。")) return;
+          var result = await call({ action: "delete", path: path });
+          if (result.ok) location.reload();
+          else show(result.message || "删除失败");
+        });
+      });
+    })();
+  </script>
+</AdminLayout>

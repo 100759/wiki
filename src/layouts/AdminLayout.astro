@@ -1,0 +1,66 @@
+---
+import "../styles/global.css";
+import { getSession } from "../lib/session";
+
+interface Props {
+  title?: string;
+  active?: "pages" | "users" | "account";
+}
+
+const { title = "管理台", active } = Astro.props;
+const session = getSession(Astro.cookies);
+
+const links = [
+  { key: "pages", href: "/admin", label: "页面" },
+  { key: "users", href: "/admin/users", label: "成员" },
+  { key: "account", href: "/admin/account", label: "账号" },
+] as const;
+---
+
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>{title} · 共创 Wiki 管理台</title>
+  </head>
+  <body class="min-h-screen bg-paper text-ink antialiased">
+    <header class="border-b border-hairline">
+      <div class="mx-auto flex h-16 max-w-4xl items-center gap-6 px-6">
+        <a href="/admin" class="text-[13px] font-medium uppercase tracking-label text-ink">管理台</a>
+
+        <nav class="flex items-center gap-5 text-[13px]">
+          {links.map((link) => (
+            <a
+              href={link.href}
+              class:list={[
+                "transition-colors",
+                active === link.key ? "text-ink" : "text-graphite hover:text-ink",
+              ]}
+            >
+              {link.label}
+            </a>
+          ))}
+        </nav>
+
+        <div class="ml-auto flex items-center gap-5 text-[13px] text-graphite">
+          <a href="/" class="transition-colors hover:text-ink">看站点</a>
+          {session && <span class="text-[12px]">{session.name}</span>}
+          <button type="button" id="admin-logout" class="transition-colors hover:text-ink">退出</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="mx-auto max-w-4xl px-6 py-12">
+      <slot />
+    </main>
+
+    <script is:inline>
+      document.getElementById("admin-logout")?.addEventListener("click", async function () {
+        await fetch("/api/logout", { method: "POST" });
+        location.href = "/admin/login";
+      });
+    </script>
+  </body>
+</html>

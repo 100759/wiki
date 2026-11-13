@@ -14,7 +14,7 @@ interface Props {
 }
 
 const { title = "共创 Wiki", sidebar = true, activePath, nav: navProp } = Astro.props;
-// 静态页由构建期传入导航；动态页（编辑/账号）没有传入时才回源。
+
 const nav =
   navProp ?? (sidebar ? buildNav(await readLocalPages().catch(() => [])) : []);
 ---
@@ -45,21 +45,6 @@ const nav =
 
         <nav class="ml-auto flex items-center gap-6 text-[13px] text-graphite">
           <a href="/ask" class="transition-colors hover:text-ink">问 AI</a>
-          <a href="/edit?path=content/new-page.md" class="hidden transition-colors hover:text-ink sm:inline">新建</a>
-          <span id="account-area" class="flex items-center gap-6">
-            <a
-              href="/login"
-              data-login-link
-              class="border border-ink px-4 py-1.5 text-[12px] uppercase tracking-label text-ink transition-colors hover:bg-ink hover:text-paper"
-            >
-              登录
-            </a>
-            <span data-user hidden class="flex items-center gap-6">
-              <a href="/account" data-user-name class="transition-colors hover:text-ink"></a>
-              <a href="/admin/users" data-admin-link hidden class="transition-colors hover:text-ink">成员</a>
-              <button type="button" data-logout class="text-graphite transition-colors hover:text-ink">退出</button>
-            </span>
-          </span>
         </nav>
       </div>
     </header>
@@ -103,35 +88,6 @@ const nav =
     </footer>
 
     <script is:inline data-astro-rerun>
-      // 静态页无法在服务端知道登录态，用非 HttpOnly 的提示 cookie 渲染头像区。
-      (function () {
-        var area = document.getElementById("account-area");
-        if (!area) return;
-        var loginLink = area.querySelector("[data-login-link]");
-        var userBox = area.querySelector("[data-user]");
-        var nameLink = area.querySelector("[data-user-name]");
-        var adminLink = area.querySelector("[data-admin-link]");
-        var logout = area.querySelector("[data-logout]");
-        var raw = document.cookie.split("; ").find(function (item) {
-          return item.indexOf("wiki_hint=") === 0;
-        });
-        var hint = raw ? decodeURIComponent(raw.slice("wiki_hint=".length)) : "";
-        var parts = hint.split("|");
-        if (parts[0] && parts[1]) {
-          if (loginLink) loginLink.hidden = true;
-          if (userBox) userBox.hidden = false;
-          if (nameLink) nameLink.textContent = parts[0];
-          if (adminLink) adminLink.hidden = parts[1] !== "admin";
-        }
-        if (logout) {
-          logout.addEventListener("click", async function () {
-            await fetch("/api/logout", { method: "POST" });
-            document.cookie = "wiki_hint=; path=/; max-age=0";
-            location.href = "/";
-          });
-        }
-      })();
-
       // 悬停预取
       if (!window.__prefetchBound) {
         window.__prefetchBound = true;

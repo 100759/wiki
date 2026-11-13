@@ -1,0 +1,92 @@
+---
+import "../../styles/global.css";
+import { getSession } from "../../lib/session";
+
+export const prerender = false;
+Astro.response.headers.set("Cache-Control", "private, no-store");
+
+if (getSession(Astro.cookies)) {
+  return Astro.redirect("/admin");
+}
+---
+
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>登录 · 共创 Wiki 管理台</title>
+  </head>
+  <body class="min-h-screen bg-paper text-ink antialiased">
+    <main class="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-6 py-16">
+      <a href="/" class="label mb-10 inline-block hover:text-ink">← 回到站点</a>
+
+      <h1 class="text-[1.9rem] font-light leading-tight tracking-tight">管理台登录</h1>
+      <p class="mt-2 text-[13px] text-graphite">只有编辑者和管理员需要登录，读者直接看页面。</p>
+
+      <form id="login-form" class="mt-10 space-y-6 border-t border-hairline pt-8">
+        <label class="block">
+          <span class="label">用户名</span>
+          <input
+            name="name"
+            autocomplete="username"
+            required
+            class="mt-2 w-full border-0 border-b border-hairline bg-transparent px-0 py-2 text-ink outline-none focus:border-ink"
+          />
+        </label>
+        <label class="block">
+          <span class="label">口令</span>
+          <input
+            name="password"
+            type="password"
+            autocomplete="current-password"
+            required
+            minlength="8"
+            class="mt-2 w-full border-0 border-b border-hairline bg-transparent px-0 py-2 text-ink outline-none focus:border-ink"
+          />
+        </label>
+        <p id="login-error" class="hidden rounded bg-red-50 px-3 py-2 text-[13px] text-red-700"></p>
+        <button
+          type="submit"
+          class="w-full border border-ink bg-ink px-4 py-2.5 text-[12px] uppercase tracking-label text-paper transition-colors hover:bg-paper hover:text-ink disabled:opacity-60"
+        >
+          登录
+        </button>
+      </form>
+
+      <p class="label mt-6">连续输错 5 次会锁定 15 分钟</p>
+    </main>
+
+    <script is:inline>
+      const form = document.getElementById("login-form");
+      const errorBox = document.getElementById("login-error");
+      form?.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        errorBox.classList.add("hidden");
+        const button = form.querySelector("button[type=submit]");
+        button.disabled = true;
+        const data = new FormData(form);
+        try {
+          const response = await fetch("/api/login", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ name: data.get("name"), password: data.get("password") }),
+          });
+          const payload = await response.json();
+          if (payload.ok) {
+            location.href = "/admin";
+            return;
+          }
+          errorBox.textContent = payload.message || "登录失败";
+          errorBox.classList.remove("hidden");
+        } catch {
+          errorBox.textContent = "网络异常，请稍后再试";
+          errorBox.classList.remove("hidden");
+        } finally {
+          button.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>

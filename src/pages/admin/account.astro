@@ -1,0 +1,70 @@
+---
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import { getSession } from "../../lib/session";
+
+export const prerender = false;
+
+const session = getSession(Astro.cookies);
+if (!session) {
+  return Astro.redirect("/admin/login");
+}
+---
+
+<AdminLayout title="账号" active="account">
+  <h1 class="text-[1.6rem] font-light tracking-tight">账号</h1>
+  <p class="label mt-2">{session.name} · {session.role}</p>
+
+  <form id="pwd-form" class="mt-10 max-w-md space-y-6 border-t border-hairline pt-8">
+    <label class="block">
+      <span class="label">当前口令</span>
+      <input
+        name="current"
+        type="password"
+        autocomplete="current-password"
+        required
+        class="mt-2 w-full border-0 border-b border-hairline bg-transparent px-0 py-2 text-ink outline-none focus:border-ink"
+      />
+    </label>
+    <label class="block">
+      <span class="label">新口令（至少 12 位）</span>
+      <input
+        name="next"
+        type="password"
+        autocomplete="new-password"
+        minlength="12"
+        required
+        class="mt-2 w-full border-0 border-b border-hairline bg-transparent px-0 py-2 text-ink outline-none focus:border-ink"
+      />
+    </label>
+    <p id="pwd-msg" class="hidden rounded px-3 py-2 text-[13px]"></p>
+    <button
+      type="submit"
+      class="border border-ink bg-ink px-4 py-2 text-[12px] uppercase tracking-label text-paper transition-colors hover:bg-paper hover:text-ink"
+    >
+      保存
+    </button>
+  </form>
+
+  <script is:inline>
+    const form = document.getElementById("pwd-form");
+    const msg = document.getElementById("pwd-msg");
+    form?.addEventListener("submit", async function (event) {
+      event.preventDefault();
+      const data = new FormData(form);
+      const response = await fetch("/api/account", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          currentPassword: data.get("current"),
+          newPassword: data.get("next"),
+        }),
+      });
+      const payload = await response.json();
+      msg.textContent = payload.ok ? "口令已更新，下次登录用新口令。" : payload.message || "修改失败";
+      msg.className =
+        "rounded px-3 py-2 text-[13px] " +
+        (payload.ok ? "bg-green-50 text-green-800" : "bg-red-50 text-red-700");
+      if (payload.ok) form.reset();
+    });
+  </script>
+</AdminLayout>

@@ -2,13 +2,12 @@ import type { APIRoute } from "astro";
 import { chat, type ChatMessage } from "../../lib/ai";
 import { pathToSlug } from "../../lib/ids";
 import { retrievePages } from "../../lib/search";
-import { getSession } from "../../lib/session";
 import { getStore } from "../../lib/storage";
 
 export const prerender = false;
 
-/** 每人每小时最多问 30 次，防止把模型额度刷掉。 */
-const MAX_PER_HOUR = 30;
+/** 公开站不要求登录，按 IP 限流，防止把模型额度刷掉。 */
+const MAX_PER_HOUR = 20;
 const WINDOW_MS = 3600 * 1000;
 const usage = new Map<string, { count: number; since: number }>();
 
@@ -30,10 +29,15 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-export const POST: APIRoute = async ({ request, cookies }) => {
-  const session = getSession(cookies);
-  if (!session) return json({ ok: false, code: "unauthorized", message: "请先登录再提问" }, 401);
+function clientIp(request: Request): string {
+  const real = request.headers.get("x-real-ip")?.trim();
+  if (real) return real;
+  const forwarded = request.headers.get("x-forwarded-for") ?? "";
+  const parts = forwarded.split(",").map((part) => part.trim()).filter(Boolean);
+  return parts[parts.length - 1] || "local";
+}
 
+export const POST: APIRoute = async ({ request }) => {
   let body: { q?: unknown; path?: unknown };
   try {
     body = (await request.json()) as typeof body;
@@ -44,7 +48,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   if (question.length < 2) return json({ ok: false, code: "invalid", message: "问题太短" }, 400);
   if (question.length > 500) return json({ ok: false, code: "invalid", message: "问题太长" }, 400);
 
-  const wait = allow(session.uid);
+  const wait = allow(clientIp(request));
   if (wait > 0) {
     return json({ ok: false, code: "rate_limited", message: `提问太频繁，请 ${Math.ceil(wait / 60)} 分钟后再试` }, 429);
   }

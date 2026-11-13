@@ -1,0 +1,99 @@
+---
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import Editor from "../../components/editor/Editor";
+import { normalizeContentPath, pageId, pathToSlug } from "../../lib/ids";
+import { getSession } from "../../lib/session";
+import { getStore } from "../../lib/storage";
+
+export const prerender = false;
+
+const rawPath = Astro.url.searchParams.get("path") ?? "content/index.md";
+let contentPath: string;
+try {
+  contentPath = normalizeContentPath(rawPath);
+} catch {
+  return Astro.redirect("/admin");
+}
+
+const store = getStore();
+const session = getSession(Astro.cookies);
+if (!session) {
+  return Astro.redirect(`/admin/login?next=${encodeURIComponent(Astro.url.pathname + Astro.url.search)}`);
+}
+if (session.role === "viewer") {
+  return Astro.redirect(`/w/${pathToSlug(contentPath)}`);
+}
+
+const found = await store.getPageByPath(contentPath);
+
+const page = found ?? {
+  id: pageId(contentPath),
+  path: contentPath,
+  title: "",
+  markdown: "",
+  sha: "",
+  updatedAt: new Date().toISOString(),
+  updatedBy: session.name,
+  acl: ["admin", "editor"],
+  order: 100,
+  parent: null,
+};
+
+const history = found ? await store.listHistory(contentPath, 10) : [];
+---
+
+<AdminLayout title={found ? `编辑：${found.title}` : "新建页面"} active="pages">
+  <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <p class="label">{found ? "编辑页面" : "新建页面"}</p>
+      <p class="mt-1 text-[13px] text-graphite">{contentPath}</p>
+    </div>
+    <div class="flex items-center gap-4">
+      {
+        found && (
+          <>
+            <button type="button" data-rename class="text-[12px] text-graphite transition-colors hover:text-ink">
+              重命名
+            </button>
+            <button type="button" data-delete class="text-[12px] text-stone-400 transition-colors hover:text-red-600">
+              删除
+            </button>
+          </>
+        )
+      }
+      <a href="/admin" class="text-[12px] text-graphite transition-colors hover:text-ink">← 页面列表</a>
+    </div>
+  </div>
+
+  <Editor client:load initial={page} user={session} history={history} />
+
+  {
+    found && (
+      <script define:vars={{ contentPath }} is:inline>
+        async function callPages(payload) {
+          const response = await fetch("/api/pages", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          return response.json();
+        }
+        document.querySelector("[data-rename]")?.addEventListener("click", async function () {
+          const target = window.prompt("新的路径（例如 content/guide/start.md）", contentPath);
+          if (!target || target === contentPath) return;
+          const result = await callPages({ action: "rename", path: contentPath, to: target });
+          if (result.ok) {
+            window.alert("已重命名，站点正在重建（约 3–5 分钟）");
+            location.href = "/admin";
+          } else window.alert(result.message || "重命名失败");
+        });
+        document.querySelector("[data-delete]")?.addEventListener("click", async function () {
+          if (!window.confirm("删除这一页？删除会生成一次提交，可从 Git 历史找回。")) return;
+          const result = await callPages({ action: "delete", path: contentPath });
+          if (result.ok) location.href = "/admin";
+          else window.alert(result.message || "删除失败");
+        });
+      </script>
+    )
+  }
+</AdminLayout>

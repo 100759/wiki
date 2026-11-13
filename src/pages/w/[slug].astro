@@ -57,14 +57,12 @@ const updated = new Date(page.updatedAt);
           ? "内置页面"
           : `更新于 ${updated.toLocaleDateString("zh-CN")}`}
       </span>
-      <span class="flex items-center gap-4 text-[12px] text-graphite">
-        <a href={`/edit?path=${encodeURIComponent(page.path)}`} class="transition-colors hover:text-ink">
-          编辑
-        </a>
-        <a href={`/ask?path=${encodeURIComponent(page.path)}`} class="transition-colors hover:text-ink">
-          问 AI
-        </a>
-      </span>
+      <a
+        href={`/ask?path=${encodeURIComponent(page.path)}`}
+        class="text-[12px] text-graphite transition-colors hover:text-ink"
+      >
+        问 AI
+      </a>
       <span id="saved-notice" hidden class="rounded bg-mist px-2 py-1 text-[11px] text-graphite">
         内容已保存，站点正在重建，几分钟后这里会更新
       </span>

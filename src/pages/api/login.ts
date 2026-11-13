@@ -108,13 +108,7 @@ export const POST: APIRoute = async ({ request }) => {
     return json({ ok: false, code: "server", message: "服务器未配置会话密钥，暂不能登录" }, 500);
   }
 
-  const response = json({ ok: true, user: { uid: user.uid, name: user.name, role: user.role } }, 200, {
+  return json({ ok: true, user: { uid: user.uid, name: user.name, role: user.role } }, 200, {
     "set-cookie": sessionCookie(token),
   });
-  // 静态页读不到 HttpOnly 会话，用一个非敏感的提示 cookie 渲染头部；权限判断仍在服务端。
-  response.headers.append(
-    "set-cookie",
-    `wiki_hint=${encodeURIComponent(`${user.name}|${user.role}`)}; Path=/; SameSite=Lax; Max-Age=${7 * 24 * 3600}`,
-  );
-  return response;
 };

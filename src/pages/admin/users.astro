@@ -1,5 +1,5 @@
 ---
-import Base from "../../layouts/Base.astro";
+import AdminLayout from "../../layouts/AdminLayout.astro";
 import { getSession } from "../../lib/session";
 import { getUserRepository } from "../../lib/users";
 
@@ -16,7 +16,7 @@ if (session.role !== "admin") {
 const users = await getUserRepository().load();
 ---
 
-<Base title="成员管理" sidebar={false}>
+<AdminLayout title="成员" active="users">
   <div class="mx-auto max-w-2xl py-16">
     <h1 class="text-[1.9rem] font-light leading-tight tracking-tight">成员管理</h1>
     <p class="mt-1 text-sm text-graphite">
@@ -137,4 +137,4 @@ const users = await getUserRepository().load();
       });
     });
   </script>
-</Base>
+</AdminLayout>
