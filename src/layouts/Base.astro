@@ -116,6 +116,31 @@ const nav = buildNav(pages);
       </div>
     </footer>
 
+    <script is:inline data-astro-rerun>
+      // 悬停预取：Astro 自带策略在这个项目里没生效，这里用事件委托自己挂。
+      if (!window.__prefetchBound) {
+        window.__prefetchBound = true;
+        const seen = new Set();
+        document.addEventListener(
+          "pointerover",
+          function (event) {
+            const link = event.target && event.target.closest ? event.target.closest('a[href^="/"]') : null;
+            if (!link) return;
+            const href = link.getAttribute("href");
+            if (!href || seen.has(href) || seen.size > 40) return;
+            if (href.startsWith("/api/") || href.startsWith("/img/") || href.startsWith("/_astro/")) return;
+            seen.add(href);
+            const preload = document.createElement("link");
+            preload.rel = "prefetch";
+            preload.href = href;
+            preload.as = "document";
+            document.head.appendChild(preload);
+          },
+          { passive: true },
+        );
+      }
+    </script>
+
     {
       session && (
         <script is:inline data-astro-rerun>
