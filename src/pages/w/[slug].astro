@@ -21,10 +21,11 @@ if (!page) {
 }
 
 const etag = `"${page.sha}"`;
-const headers = new Headers({
-  "Cache-Control": "public, s-maxage=10, stale-while-revalidate=60",
-  ETag: etag,
-});
+const loggedIn = Boolean(getSession(Astro.cookies));
+const cacheControl = loggedIn
+  ? "private, no-store"
+  : "public, s-maxage=30, stale-while-revalidate=600";
+const headers = new Headers({ "Cache-Control": cacheControl, ETag: etag });
 
 const ifNoneMatch = Astro.request.headers.get("if-none-match");
 if (ifNoneMatch && ifNoneMatch.split(",").some((tag) => tag.trim() === etag)) {

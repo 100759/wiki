@@ -2,9 +2,11 @@
 import Base from "../layouts/Base.astro";
 import { pathToSlug } from "../lib/ids";
 import { getSession } from "../lib/session";
+import { setPageCache } from "../lib/cache";
 import { getStore } from "../lib/storage";
 
 export const prerender = false;
+setPageCache(Astro.cookies, Astro.response.headers, { maxAge: 60, swr: 600 });
 
 const store = getStore();
 const pages = await store.listPages();

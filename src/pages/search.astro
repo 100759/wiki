@@ -1,12 +1,14 @@
 ---
 import Base from "../layouts/Base.astro";
 import { searchPages } from "../lib/search";
+import { setPageCache } from "../lib/cache";
 import { getStore } from "../lib/storage";
 
 export const prerender = false;
 
 const q = (Astro.url.searchParams.get("q") ?? "").trim();
 const hits = q ? await searchPages(getStore(), q) : [];
+setPageCache(Astro.cookies, Astro.response.headers, { maxAge: 30, swr: 300 });
 ---
 
 <Base title={q ? `搜索：${q}` : "搜索"} sidebar={false}>

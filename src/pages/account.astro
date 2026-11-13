@@ -3,6 +3,7 @@ import Base from "../layouts/Base.astro";
 import { getSession } from "../lib/session";
 
 export const prerender = false;
+Astro.response.headers.set("Cache-Control", "private, no-store");
 
 const session = getSession(Astro.cookies);
 if (!session) {

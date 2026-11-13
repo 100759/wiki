@@ -179,7 +179,7 @@ export interface GithubFile {
   text: string;
 }
 
-const TREE_TTL_MS = 10_000;
+const TREE_TTL_MS = 45_000;
 
 export class GithubClient {
   readonly config: GithubConfig;
@@ -237,10 +237,15 @@ export class GithubClient {
 
   /* ------------------------- 读 ------------------------- */
 
+  private headCache: { at: number; sha: string } | null = null;
+
   async headSha(): Promise<string> {
+    const now = Date.now();
+    if (this.headCache && now - this.headCache.at < 15_000) return this.headCache.sha;
     const { json } = await this.call("GET", `/repos/${this.config.repo}/git/ref/heads/${this.config.branch}`);
     const sha = (json as { object?: { sha?: string } } | null)?.object?.sha;
     if (!sha) throw new GithubError(0, "bad_response", "取不到分支 head");
+    this.headCache = { at: now, sha };
     return sha;
   }
 
@@ -272,6 +277,7 @@ export class GithubClient {
 
   invalidate(): void {
     this.treeCache = null;
+    this.headCache = null;
   }
 
   /** 仅自测使用：清空 blob 缓存，验证读失败路径。 */
