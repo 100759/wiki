@@ -1,16 +1,6 @@
 {
   "version": 1,
   "pages": {
-    "content/_readcheck.md": {
-      "title": "读路径探针",
-      "order": 100,
-      "acl": [
-        "admin",
-        "editor"
-      ],
-      "updatedAt": "2026-11-13T08:54:46.098Z",
-      "updatedBy": "probe"
-    },
     "content/about.md": {
       "title": "关于这个站",
       "order": 100,
