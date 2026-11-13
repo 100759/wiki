@@ -20,6 +20,26 @@
       ],
       "updatedAt": "2026-11-13T09:23:39.075Z",
       "updatedBy": "admin"
+    },
+    "content/index.md": {
+      "title": "欢迎来到共创 Wiki",
+      "order": 100,
+      "acl": [
+        "admin",
+        "editor"
+      ],
+      "updatedAt": "2026-11-13T00:00:00.000Z",
+      "updatedBy": "seed"
+    },
+    "content/new-page.md": {
+      "title": "测试",
+      "order": 100,
+      "acl": [
+        "admin",
+        "editor"
+      ],
+      "updatedAt": "2026-11-13T12:43:22.094Z",
+      "updatedBy": "admin"
     }
   }
 }
