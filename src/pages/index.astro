@@ -6,7 +6,7 @@ import { setPageCache } from "../lib/cache";
 import { getStore } from "../lib/storage";
 
 export const prerender = false;
-setPageCache(Astro.cookies, Astro.response.headers, { maxAge: 60, swr: 600 });
+setPageCache(Astro.cookies, Astro.response.headers, { maxAge: 180, swr: 1800 });
 
 const store = getStore();
 const pages = await store.listPages();

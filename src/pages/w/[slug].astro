@@ -24,7 +24,7 @@ const etag = `"${page.sha}"`;
 const loggedIn = Boolean(getSession(Astro.cookies));
 const cacheControl = loggedIn
   ? "private, no-store"
-  : "public, s-maxage=30, stale-while-revalidate=600";
+  : "public, s-maxage=120, stale-while-revalidate=1800";
 const headers = new Headers({ "Cache-Control": cacheControl, ETag: etag });
 
 const ifNoneMatch = Astro.request.headers.get("if-none-match");

@@ -15,7 +15,7 @@ export function setPageCache(
     headers.set("Cache-Control", "private, no-store");
     return;
   }
-  const maxAge = options.maxAge ?? 60;
-  const swr = options.swr ?? 600;
+  const maxAge = options.maxAge ?? 180;
+  const swr = options.swr ?? 1800;
   headers.set("Cache-Control", `public, s-maxage=${maxAge}, stale-while-revalidate=${swr}`);
 }
