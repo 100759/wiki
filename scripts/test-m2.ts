@@ -284,6 +284,11 @@ function testRateLimit(): void {
   ok("其他用户不受影响", checkRateLimit("5.6.7.8", "alice", now).allowed);
   ok("锁定期内即使换 IP 也被账号维度挡住", !checkRateLimit("9.9.9.9", "bob", now).allowed);
   ok("15 分钟后解锁", checkRateLimit("1.2.3.4", "bob", now + 16 * 60 * 1000).allowed);
+
+  // 换用户名绕限流：同一 IP 累计失败到阈值后整体锁定
+  resetRateLimits();
+  for (let i = 0; i < 30; i += 1) recordFailure("7.7.7.7", `u${i}`, now);
+  ok("同 IP 换名也受限", !checkRateLimit("7.7.7.7", "fresh-name", now).allowed);
   resetRateLimits();
 }
 
@@ -416,8 +421,55 @@ async function testStore(): Promise<void> {
   const history = await store.listHistory("content/about.md", 5);
   ok("有提交历史", history.length > 0);
 
-  const restored = await store.restore("content/pic.md", withImage.ok ? withImage.commit : "");
+  const restored = await store.restore("content/pic.md", withImage.ok ? withImage.commit : "", {
+    uid: "u2",
+    name: "李四",
+    role: "admin",
+  });
   ok("还原生成新提交", restored.ok, JSON.stringify(restored));
+
+  // 图片走独立上传接口，不进保存请求体
+  const upload = await store.uploadImage({
+    pagePath: "content/pic.md",
+    name: "up.png",
+    mime: "image/png",
+    bytes: new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]),
+    actor: { uid: "u2", name: "李四", role: "admin" },
+  });
+  ok("图片上传成功", upload.ok && upload.url.startsWith("/img/assets/"), JSON.stringify(upload));
+  const badExt = await store.uploadImage({
+    pagePath: "content/pic.md",
+    name: "up.webp",
+    mime: "image/png",
+    bytes: new Uint8Array([1, 2, 3]),
+    actor: { uid: "u2", name: "李四", role: "admin" },
+  });
+  ok("扩展名与类型不匹配被拒", !badExt.ok);
+  // 还原按操作者判权：editor 不能还原 admin-only 页
+  const adminMeta = JSON.parse(fake.files.get("_system/meta.json")?.content.toString("utf8") ?? "{}") as {
+    pages: Record<string, { acl?: string[] }>;
+  };
+  adminMeta.pages["content/pic.md"] = { acl: ["admin"] };
+  await commitFiles(client, {
+    message: "把 pic 设为 admin-only",
+    files: [{ path: "_system/meta.json", content: `${JSON.stringify(adminMeta, null, 2)}\n` }],
+    expected: { "_system/meta.json": fake.files.get("_system/meta.json")?.sha ?? null },
+  });
+  const editorRestore = await store.restore("content/pic.md", withImage.ok ? withImage.commit : "", {
+    uid: "u1",
+    name: "张三",
+    role: "editor",
+  });
+  ok("editor 不能还原 admin-only 页", !editorRestore.ok && editorRestore.code === "forbidden");
+
+  const viewerUpload = await store.uploadImage({
+    pagePath: "content/pic.md",
+    name: "up.png",
+    mime: "image/png",
+    bytes: new Uint8Array([1, 2, 3]),
+    actor: { uid: "u3", name: "读者", role: "viewer" },
+  });
+  ok("viewer 不能上传", !viewerUpload.ok && viewerUpload.code === "forbidden");
 }
 
 async function testCommitFiles(): Promise<void> {

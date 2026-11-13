@@ -52,6 +52,7 @@ function toBuffer(content: string | Buffer): Buffer {
 
 export async function commitFiles(client: GithubClient, plan: CommitPlan): Promise<CommitOutcome> {
   const maxRetries = Math.max(1, Math.min(plan.maxRetries ?? 3, 5));
+  let lastBlobs: Record<string, string> = {};
 
   for (let attempt = 0; attempt < maxRetries; attempt += 1) {
     client.invalidate();
@@ -85,6 +86,7 @@ export async function commitFiles(client: GithubClient, plan: CommitPlan): Promi
     for (const file of resolved) {
       blobs[file.path] = await client.createBlob(file.buffer);
     }
+    lastBlobs = blobs;
 
     const treeSha = await client.createTree(
       tree.sha,
@@ -101,6 +103,23 @@ export async function commitFiles(client: GithubClient, plan: CommitPlan): Promi
       if (err instanceof GithubError) throw err;
       throw err;
     }
+  }
+
+  // 重试用尽时再做一次核对：如果仓库里已经是我们写的 blob（响应丢失但实际落地），
+  // 不能报冲突让用户重写一遍。
+  try {
+    client.invalidate();
+    const tree = await client.tree();
+    const landed = plan.files.every((file) => {
+      const want = lastBlobs[file.path];
+      return Boolean(want) && tree.entries.get(file.path)?.sha === want;
+    });
+    if (landed) {
+      const commits = await client.history(plan.files[0]?.path ?? "", 1);
+      return { ok: true, commit: commits[0]?.sha ?? "", blobs: lastBlobs };
+    }
+  } catch {
+    /* 核对失败就按冲突处理 */
   }
 
   return { ok: false, code: "conflict", path: plan.files[0]?.path ?? "" };

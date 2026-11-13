@@ -135,15 +135,17 @@ data/
 
 `WIKI_DATA_DIR` 可改根目录。`id = sha1(仓库相对路径)[:12]`；本地 `sha = sha1(markdown)`（M2 换成 GitHub blob sha）。
 
-## Mock 身份（M1 专用）
+## 身份与权限（M2）
 
-页面右上角切换，写 Cookie `mock_role`：
+登录走 `/login`，凭用户名与口令换取 HMAC 签名 Cookie（`JWT_SECRET`），角色取自 `_system/users.json`：
 
-- 管理员 admin：可编辑
-- 编辑者 editor：可编辑（默认）
-- 读者 viewer：只读，接口返回 403 `forbidden`
+- 管理员 admin：可编辑、可还原任意页面
+- 编辑者 editor：可编辑 ACL 允许的页面，不能还原 admin-only 页面
+- 读者 viewer：只读，写接口返回 403 `forbidden`
 
-ACL 默认 `["admin","editor"]`；M2 接真实邀请码 / PBKDF2 / JWT（模块 F）后删除 `src/lib/session.ts` 的 mock 部分。
+M1 的 `mock_role` Cookie 已在 M2 删除，仓库里只剩一行说明注释；任何可伪造角色的入口都不再存在。
+
+图片走 `POST /api/upload`（原始二进制，≤800KB），正文只带图片 URL，不再把 base64 塞进保存请求。
 
 ## M1 完成度对照（v2 §3.1）
 

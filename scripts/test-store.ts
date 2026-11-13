@@ -101,7 +101,11 @@ async function main() {
   const history3 = await store.listHistory("content/guide/start.md", 10);
   check("历史累计 3 条且最新在前", history3.length === 3 && withImage.ok && history3[0]?.sha === withImage.sha);
 
-  const back = await store.restore("content/guide/start.md", created.sha);
+  const back = await store.restore("content/guide/start.md", created.sha, {
+    uid: "u-test",
+    name: "测试编辑",
+    role: "editor",
+  });
   check("还原到第一版成功", back.ok, JSON.stringify(back));
   const restored = await store.getPageByPath("content/guide/start.md");
   check("还原后内容回到第一版", restored?.markdown === v1);

@@ -172,7 +172,7 @@ export interface RateLimitState {
 }
 
 export function checkRateLimit(ip: string, user: string, now = Date.now()): RateLimitState {
-  for (const key of [keyOf("ip", ip), keyOf("user", user)]) {
+  for (const key of [keyOf("ip", ip), keyOf("user", user), `ipall:${ip}`]) {
     const bucket = buckets.get(key);
     if (!bucket) continue;
     if (bucket.lockedUntil > now) {
@@ -184,14 +184,16 @@ export function checkRateLimit(ip: string, user: string, now = Date.now()): Rate
 }
 
 export function recordFailure(ip: string, user: string, now = Date.now()): void {
-  for (const key of [keyOf("ip", ip), keyOf("user", user)]) {
+  // ipall 用更高阈值：防止换用户名绕开按账号的限流，同时不误伤正常用户。
+  for (const key of [keyOf("ip", ip), keyOf("user", user), `ipall:${ip}`]) {
+    const limit = key.startsWith("ipall:") ? MAX_FAILURES * 6 : MAX_FAILURES;
     const bucket = buckets.get(key);
     if (!bucket || now - bucket.firstAt > WINDOW_MS) {
       buckets.set(key, { failures: 1, firstAt: now, lockedUntil: 0 });
       continue;
     }
     bucket.failures += 1;
-    if (bucket.failures >= MAX_FAILURES) bucket.lockedUntil = now + LOCK_MS;
+    if (bucket.failures >= limit) bucket.lockedUntil = now + LOCK_MS;
   }
 }
 

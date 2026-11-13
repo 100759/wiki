@@ -38,7 +38,6 @@ interface UploadImage {
   name: string;
   mime: string;
   bytes: Uint8Array;
-  previewUrl: string;
 }
 
 interface Props {
@@ -55,20 +54,11 @@ function slugOf(contentPath: string): string {
   return rel.split("/").map((s) => encodeURIComponent(s)).join(".");
 }
 
-function toBase64(bytes: Uint8Array): string {
-  let binary = "";
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
-  }
-  return btoa(binary);
-}
-
 async function compressImage(file: File): Promise<UploadImage> {
   if (file.type === "image/gif") {
     const bytes = new Uint8Array(await file.arrayBuffer());
     if (bytes.byteLength > MAX_BYTES) throw new Error("GIF 超过 800KB，请先压缩后再插入");
-    return { name: file.name, mime: "image/gif", bytes, previewUrl: URL.createObjectURL(file) };
+    return { name: file.name, mime: "image/gif", bytes };
   }
 
   const bitmap = await createImageBitmap(file);
@@ -97,7 +87,6 @@ async function compressImage(file: File): Promise<UploadImage> {
     name,
     mime: "image/webp",
     bytes: new Uint8Array(await blob.arrayBuffer()),
-    previewUrl: URL.createObjectURL(blob),
   };
 }
 
@@ -108,7 +97,6 @@ export default function Editor({ initial, user, history }: Props) {
   const [status, setStatus] = useState<{ kind: "ok" | "error" | "info"; text: string } | null>(null);
   const [diff, setDiff] = useState<{ original: string; converted: string } | null>(null);
   const [pendingImages, setPendingImages] = useState(0);
-  const imagesRef = useRef<UploadImage[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const roundTripChecked = useRef(false);
   const readOnly = user.role === "viewer";
@@ -176,17 +164,35 @@ export default function Editor({ initial, user, history }: Props) {
       for (const file of files) {
         try {
           const image = await compressImage(file);
-          imagesRef.current.push(image);
-          editor.chain().focus().setImage({ src: image.previewUrl, alt: image.name, title: image.name }).run();
-          setStatus({ kind: "info", text: `已插入 ${image.name}（保存时随正文提交）` });
+          // 图片单独上传：原始二进制走 /api/upload，避免 base64 撑爆保存请求体（1MB 上限）。
+          const response = await fetch(`/api/upload?path=${encodeURIComponent(initial.path)}`, {
+            method: "POST",
+            headers: {
+              "content-type": image.mime,
+              "x-file-name": encodeURIComponent(image.name),
+            },
+            body: image.bytes,
+          });
+          const payload = (await response.json()) as
+            | { ok: true; url: string }
+            | { ok: false; code: string; message: string };
+          if (!response.ok || !payload.ok) {
+            throw new Error(!payload.ok ? payload.message : `上传失败（HTTP ${response.status}）`);
+          }
+          editor
+            .chain()
+            .focus()
+            .setImage({ src: payload.url, alt: image.name, title: image.name })
+            .run();
+          setStatus({ kind: "info", text: `已上传 ${image.name}` });
         } catch (err) {
-          setStatus({ kind: "error", text: (err as Error).message });
+          setStatus({ kind: "error", text: `图片上传失败：${(err as Error).message}` });
         } finally {
           setPendingImages((n) => Math.max(0, n - 1));
         }
       }
     },
-    [editor],
+    [editor, initial.path],
   );
 
   const save = useCallback(async () => {
@@ -195,11 +201,6 @@ export default function Editor({ initial, user, history }: Props) {
     setStatus(null);
 
     let markdown = editor.getMarkdown();
-    const used = imagesRef.current.filter((image) => markdown.includes(image.previewUrl));
-    for (const image of used) {
-      markdown = markdown
-        .split(image.previewUrl).join(`/uploads/pending/${encodeURIComponent(image.name)}`);
-    }
 
     if (markdown.trim() === "") {
       setSaving(false);
@@ -219,11 +220,6 @@ export default function Editor({ initial, user, history }: Props) {
           title: title.trim() || "未命名页面",
           markdown,
           baseSha: initial.sha || null,
-          images: used.map((image) => ({
-            name: image.name,
-            mime: image.mime,
-            bytesBase64: toBase64(image.bytes),
-          })),
         }),
       });
       const data = (await response.json()) as

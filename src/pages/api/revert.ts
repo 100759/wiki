@@ -28,8 +28,16 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     return json({ ok: false, code: "invalid", message: "path / sha 必填" }, 400);
   }
 
-  const result = await getStore().restore(body.path, body.sha);
-  if (result.ok) return json(result, 200);
-  const status = result.code === "conflict" ? 409 : result.code === "forbidden" ? 403 : 400;
-  return json(result, status);
+  try {
+    // 还原按操作者身份判权：editor 不能借还原写 admin-only 页面。
+    const result = await getStore().restore(body.path, body.sha, session);
+    if (result.ok) return json(result, 200);
+    const status = result.code === "conflict" ? 409 : result.code === "forbidden" ? 403 : 400;
+    return json(result, status);
+  } catch (err) {
+    return json(
+      { ok: false, code: "invalid", message: `还原失败：${(err as Error).message}` },
+      400,
+    );
+  }
 };

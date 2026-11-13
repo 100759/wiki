@@ -29,10 +29,12 @@ function json(body: unknown, status = 200, extra: Record<string, string> = {}): 
 }
 
 function clientIp(request: Request): string {
+  // x-real-ip 由边缘写入，优先可信；XFF 客户端可伪造，取最后一段（最近一跳）而不是第一段。
+  const real = request.headers.get("x-real-ip")?.trim();
+  if (real) return real;
   const forwarded = request.headers.get("x-forwarded-for") ?? "";
-  const first = forwarded.split(",")[0]?.trim();
-  if (first) return first;
-  return request.headers.get("x-real-ip")?.trim() || "local";
+  const parts = forwarded.split(",").map((p) => p.trim()).filter(Boolean);
+  return parts[parts.length - 1] || "local";
 }
 
 export const POST: APIRoute = async ({ request }) => {

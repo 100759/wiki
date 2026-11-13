@@ -8,6 +8,8 @@ import type {
   PageSummary,
   SaveInput,
   SaveResult,
+  UploadInput,
+  UploadResult,
 } from "./storage";
 
 /* ------------------------------------------------------------------ *
@@ -247,6 +249,9 @@ export class GithubStore implements ContentStore {
     }
 
     const tree = await this.client.tree();
+    if (tree.truncated) {
+      return { ok: false, code: "invalid", message: "仓库文件目录过大导致列表被截断，暂不能安全写入" };
+    }
     const current = tree.entries.get(contentPath)?.sha ?? null;
     const baseSha = input.baseSha && input.baseSha.length > 0 ? input.baseSha : null;
     // 打包内容只做展示，不作为可写基线；第一次真实保存必须显式覆盖（baseSha 为 null 且文件不存在）。
@@ -340,6 +345,54 @@ export class GithubStore implements ContentStore {
     return { ok: true, sha: outcome.blobs[contentPath] ?? "", commit: outcome.commit };
   }
 
+  async uploadImage(input: UploadInput): Promise<UploadResult> {
+    if (input.actor.role === "viewer") {
+      return { ok: false, code: "forbidden", message: "viewer 角色不能上传图片" };
+    }
+    let contentPath: string;
+    try {
+      contentPath = normalizeContentPath(input.pagePath);
+    } catch (err) {
+      return { ok: false, code: "invalid", message: (err as Error).message };
+    }
+    if (!ALLOWED_MIME.has(input.mime)) {
+      return { ok: false, code: "invalid", message: `不支持的图片类型：${input.mime}` };
+    }
+    const ext = (input.name.match(/\.[^.]+$/) ?? [""])[0].toLowerCase();
+    const expectedExt: Record<string, string[]> = {
+      "image/webp": [".webp"],
+      "image/png": [".png"],
+      "image/jpeg": [".jpg", ".jpeg"],
+      "image/gif": [".gif"],
+    };
+    if (!(expectedExt[input.mime] ?? []).includes(ext)) {
+      return { ok: false, code: "invalid", message: `扩展名 ${ext || "(无)"} 与类型 ${input.mime} 不匹配` };
+    }
+    if (input.bytes.byteLength === 0) return { ok: false, code: "invalid", message: "图片为空" };
+    if (input.bytes.byteLength > MAX_IMAGE_BYTES) {
+      return { ok: false, code: "invalid", message: "图片超过 800KB" };
+    }
+
+    const tree = await this.client.tree();
+    if (tree.truncated) {
+      return { ok: false, code: "invalid", message: "仓库文件目录过大导致列表被截断，暂不能上传" };
+    }
+    const id = pageId(contentPath);
+    const name = safeName(input.name);
+    const repoPath = `assets/${id}/${name}`;
+    const current = tree.entries.get(repoPath)?.sha ?? null;
+
+    const outcome = await commitFiles(this.client, {
+      message: `上传图片 ${name}（${input.actor.name}）`,
+      files: [{ path: repoPath, content: Buffer.from(input.bytes) }],
+      expected: { [repoPath]: current },
+    });
+    if (!outcome.ok) {
+      return { ok: false, code: "invalid", message: "图片写入冲突，请重试" };
+    }
+    return { ok: true, url: `/img/${repoPath}` };
+  }
+
   async listHistory(
     input: string,
     limit: number,
@@ -358,7 +411,7 @@ export class GithubStore implements ContentStore {
     }
   }
 
-  async restore(input: string, commitSha: string): Promise<SaveResult> {
+  async restore(input: string, commitSha: string, actor: SaveInput["actor"]): Promise<SaveResult> {
     let contentPath: string;
     try {
       contentPath = normalizeContentPath(input);
@@ -381,7 +434,7 @@ export class GithubStore implements ContentStore {
       markdown: file.text,
       baseSha: current?.sha ?? null,
       images: [],
-      actor: { uid: "system", name: "版本还原", role: "admin" },
+      actor,
     });
   }
 }

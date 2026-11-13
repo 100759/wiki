@@ -44,16 +44,31 @@ export type SaveResult =
   | { ok: true; sha: string; commit: string }
   | { ok: false; code: "conflict" | "forbidden" | "invalid"; message: string };
 
+export interface UploadInput {
+  pagePath: string;
+  name: string;
+  mime: string;
+  bytes: Uint8Array;
+  actor: { uid: string; name: string; role: "admin" | "editor" | "viewer" };
+}
+
+export type UploadResult =
+  | { ok: true; url: string }
+  | { ok: false; code: "forbidden" | "invalid"; message: string };
+
 export interface ContentStore {
   getPageByPath(path: string): Promise<PageRecord | null>;
   getPageById(id: string): Promise<PageRecord | null>;
   listPages(): Promise<PageSummary[]>;
   savePage(input: SaveInput): Promise<SaveResult>;
+  /** 图片单独上传，避免 base64 撑爆保存请求体。 */
+  uploadImage(input: UploadInput): Promise<UploadResult>;
   listHistory(
     path: string,
     limit: number,
   ): Promise<{ sha: string; message: string; date: string; author: string }[]>;
-  restore(path: string, sha: string): Promise<SaveResult>;
+  /** 还原是写操作，必须带操作者，权限按操作者判。 */
+  restore(path: string, sha: string, actor: SaveInput["actor"]): Promise<SaveResult>;
 }
 
 /* ------------------------------------------------------------------ *
@@ -502,7 +517,32 @@ export class LocalFileStore implements ContentStore {
       .map(({ sha, message, date, author }) => ({ sha, message, date, author }));
   }
 
-  async restore(input: string, sha: string): Promise<SaveResult> {
+  async uploadImage(input: UploadInput): Promise<UploadResult> {
+    if (input.actor.role === "viewer") {
+      return { ok: false, code: "forbidden", message: "viewer 角色不能上传图片" };
+    }
+    if (!(await this.ensureDirs())) {
+      return { ok: false, code: "invalid", message: "当前部署为只读存储，图片需在 M2 接入 GitHub" };
+    }
+    let contentPath: string;
+    try {
+      contentPath = normalizeContentPath(input.pagePath);
+    } catch (err) {
+      return { ok: false, code: "invalid", message: (err as Error).message };
+    }
+    if (input.bytes.byteLength === 0) return { ok: false, code: "invalid", message: "图片为空" };
+    if (input.bytes.byteLength > 800 * 1024) {
+      return { ok: false, code: "invalid", message: "图片超过 800KB" };
+    }
+    const id = pageId(contentPath);
+    const name = safeName(input.name);
+    const dir = path.join(this.uploadsDir, id);
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, name), input.bytes);
+    return { ok: true, url: `/uploads/${id}/${encodeURIComponent(name)}` };
+  }
+
+  async restore(input: string, sha: string, actor: SaveInput["actor"]): Promise<SaveResult> {
     let contentPath: string;
     try {
       contentPath = normalizeContentPath(input);
@@ -521,7 +561,7 @@ export class LocalFileStore implements ContentStore {
       // 还原是一次新提交，基线取当前磁盘版本。
       baseSha: current?.sha ?? null,
       images: [],
-      actor: { uid: "system", name: "版本还原", role: "admin" },
+      actor,
     });
   }
 }
