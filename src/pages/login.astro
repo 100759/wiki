@@ -12,8 +12,8 @@ const next = Astro.url.searchParams.get("next") ?? "/";
 const safeNext = next.startsWith("/") && !next.startsWith("//") ? next : "/";
 ---
 
-<Base title="登录">
-  <div class="mx-auto max-w-sm">
+<Base title="登录" sidebar={false}>
+  <div class="mx-auto max-w-sm py-16">
     <h1 class="text-[1.9rem] font-light leading-tight tracking-tight">登录</h1>
     <p class="mt-1 text-sm text-graphite">用管理员发给你的用户名和口令登录，登录后才能编辑与保存。</p>
 

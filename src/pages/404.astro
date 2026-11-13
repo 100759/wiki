@@ -5,7 +5,7 @@ export const prerender = false;
 Astro.response.status = 404;
 ---
 
-<Base title="页面不存在">
+<Base title="页面不存在" sidebar={false}>
   <div class="mx-auto max-w-md py-16 text-center">
     <p class="text-5xl font-bold text-stone-300">404</p>
     <h1 class="mt-3 text-[1.9rem] font-light leading-tight tracking-tight">这一页不存在</h1>
