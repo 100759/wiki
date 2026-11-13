@@ -1,0 +1,58 @@
+---
+import Base from "../../layouts/Base.astro";
+import { pathToSlug, slugToPath } from "../../lib/ids";
+import { renderMarkdown } from "../../lib/render";
+import { getStore } from "../../lib/storage";
+
+export const prerender = false;
+
+const slug = Astro.params.slug ?? "";
+const contentPath = slugToPath(slug);
+if (!contentPath) {
+  return new Response("Not found", { status: 404 });
+}
+
+const store = getStore();
+const page = await store.getPageByPath(contentPath);
+if (!page) {
+  return new Response("Not found", { status: 404 });
+}
+
+const etag = `"${page.sha}"`;
+const headers = new Headers({
+  "Cache-Control": "public, s-maxage=10, stale-while-revalidate=60",
+  ETag: etag,
+});
+
+const ifNoneMatch = Astro.request.headers.get("if-none-match");
+if (ifNoneMatch && ifNoneMatch.split(",").some((tag) => tag.trim() === etag)) {
+  return new Response(null, { status: 304, headers });
+}
+
+Astro.response.headers.set("Cache-Control", headers.get("Cache-Control")!);
+Astro.response.headers.set("ETag", etag);
+
+const html = renderMarkdown(page.markdown);
+const updated = new Date(page.updatedAt);
+---
+
+<Base title={page.title}>
+  <article class="rounded-lg border border-stone-200 bg-white px-5 py-7 sm:px-8">
+    <header class="mb-6 border-b border-stone-100 pb-4">
+      <h1 class="text-2xl font-bold">{page.title}</h1>
+      <p class="mt-2 text-xs text-stone-400">
+        <code>{page.path}</code> · 最近由 {page.updatedBy} 更新
+        {page.updatedAt === new Date(0).toISOString() ? "" : `于 ${updated.toLocaleString("zh-CN")}`}
+        · sha {page.sha.slice(0, 7)}
+      </p>
+    </header>
+    <div class="wiki-prose" set:html={html} />
+  </article>
+
+  <div class="mt-5 flex items-center justify-between text-sm">
+    <a href="/" class="text-stone-500 hover:text-ink">← 全部页面</a>
+    <a href={`/edit?path=${encodeURIComponent(page.path)}`} class="text-stone-500 hover:text-ink">
+      编辑本页
+    </a>
+  </div>
+</Base>

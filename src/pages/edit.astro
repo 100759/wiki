@@ -1,0 +1,40 @@
+---
+import Base from "../layouts/Base.astro";
+import Editor from "../components/editor/Editor";
+import { normalizeContentPath, pageId } from "../lib/ids";
+import { getSession } from "../lib/session";
+import { getStore } from "../lib/storage";
+
+export const prerender = false;
+
+const rawPath = Astro.url.searchParams.get("path") ?? "content/index.md";
+let contentPath: string;
+try {
+  contentPath = normalizeContentPath(rawPath);
+} catch {
+  return Astro.redirect("/");
+}
+
+const store = getStore();
+const found = await store.getPageByPath(contentPath);
+const session = getSession(Astro.cookies);
+
+const page = found ?? {
+  id: pageId(contentPath),
+  path: contentPath,
+  title: "",
+  markdown: "",
+  sha: "",
+  updatedAt: new Date().toISOString(),
+  updatedBy: session.name,
+  acl: ["admin", "editor"],
+  order: 100,
+  parent: null,
+};
+
+const history = found ? await store.listHistory(contentPath, 10) : [];
+---
+
+<Base title={found ? `编辑：${found.title}` : "新建页面"}>
+  <Editor client:load initial={page} user={session} history={history} />
+</Base>

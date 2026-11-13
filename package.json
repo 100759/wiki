@@ -1,0 +1,42 @@
+{
+  "name": "wiki-site",
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "test:store": "tsx scripts/test-store.ts",
+    "test:md": "tsx scripts/test-md.ts",
+    "seed": "tsx scripts/seed.ts",
+    "test:images": "tsx scripts/test-images.ts"
+  },
+  "type": "module",
+  "private": "true",
+  "dependencies": {
+    "@astrojs/react": "4.4.2",
+    "@astrojs/tailwind": "6.0.2",
+    "@edgeone/astro": "1.1.5",
+    "@tiptap/core": "3.33.1",
+    "@tiptap/extension-image": "3.33.1",
+    "@tiptap/extension-placeholder": "3.33.1",
+    "@tiptap/extension-table": "3.33.1",
+    "@tiptap/markdown": "3.33.1",
+    "@tiptap/pm": "3.33.1",
+    "@tiptap/react": "3.33.1",
+    "@tiptap/starter-kit": "3.33.1",
+    "astro": "5.18.2",
+    "hast-util-to-html": "9.0.6",
+    "lowlight": "3.3.0",
+    "markdown-it": "14.1.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "tailwindcss": "3.4.19"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "14.2.0",
+    "@types/react": "18.3.31",
+    "@types/react-dom": "18.3.7",
+    "jsdom": "27.4.0",
+    "tsx": "4.23.15"
+  }
+}

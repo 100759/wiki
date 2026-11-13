@@ -1,0 +1,62 @@
+---
+import Base from "../layouts/Base.astro";
+import { pathToSlug } from "../lib/ids";
+import { getStore } from "../lib/storage";
+
+export const prerender = false;
+
+const store = getStore();
+const pages = await store.listPages();
+const roots = pages.filter((p) => !p.parent);
+const children = new Map<string, typeof pages>();
+for (const page of pages) {
+  if (!page.parent) continue;
+  const list = children.get(page.parent) ?? [];
+  list.push(page);
+  children.set(page.parent, list);
+}
+---
+
+<Base title="全部页面">
+  <div class="mb-6 flex items-end justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-bold">全部页面</h1>
+      <p class="mt-1 text-sm text-stone-500">
+        共 {pages.length} 页。读者免登录阅读；编辑者可用右侧身份切换体验权限。
+      </p>
+    </div>
+    <a
+      href="/edit?path=content/new-page.md"
+      class="rounded-md bg-ink px-3 py-1.5 text-sm text-white hover:bg-black"
+    >
+      新建页面
+    </a>
+  </div>
+
+  {
+    pages.length === 0 ? (
+      <p class="rounded-lg border border-dashed border-stone-300 p-8 text-center text-stone-500">
+        还没有页面。点“新建页面”开始。
+      </p>
+    ) : (
+      <ul class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
+        {pages.map((page) => (
+          <li class="flex items-center gap-3 px-4 py-3">
+            <div class="min-w-0 flex-1">
+              <a href={`/w/${pathToSlug(page.path)}`} class="font-medium hover:text-blue-700">
+                {page.title}
+              </a>
+              <div class="truncate text-xs text-stone-400">{page.path}</div>
+            </div>
+            <span class="rounded bg-stone-100 px-1.5 py-0.5 text-[11px] text-stone-500">
+              {page.acl.join(" / ")}
+            </span>
+            <a href={`/edit?path=${encodeURIComponent(page.path)}`} class="text-xs text-stone-500 hover:text-ink">
+              编辑
+            </a>
+          </li>
+        ))}
+      </ul>
+    )
+  }
+</Base>

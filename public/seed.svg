@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="200" viewBox="0 0 640 200" role="img" aria-label="示意图片">
+  <rect width="640" height="200" rx="16" fill="#f1ede4"/>
+  <circle cx="90" cy="100" r="42" fill="#1f2328"/>
+  <path d="M70 100h40M90 80v40" stroke="#fbfaf7" stroke-width="8" stroke-linecap="round"/>
+  <text x="160" y="92" font-family="-apple-system, PingFang SC, sans-serif" font-size="24" font-weight="700" fill="#1f2328">图片占位示意</text>
+  <text x="160" y="124" font-family="-apple-system, PingFang SC, sans-serif" font-size="14" fill="#6b6459">编辑器插入的图片会压成 WebP，随正文一起保存</text>
+</svg>

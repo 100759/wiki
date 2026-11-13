@@ -1,0 +1,71 @@
+---
+import "../styles/global.css";
+import { getSession, MOCK_USERS, SESSION_COOKIE, isRole } from "../lib/session";
+
+interface Props {
+  title?: string;
+}
+
+const { title = "共创 Wiki" } = Astro.props;
+const session = getSession(Astro.cookies);
+const cookie = Astro.cookies.get(SESSION_COOKIE)?.value;
+const activeRole = isRole(cookie) ? cookie : "editor";
+const roles = Object.keys(MOCK_USERS) as Array<keyof typeof MOCK_USERS>;
+---
+
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>{title} · 共创 Wiki</title>
+  </head>
+  <body class="min-h-screen bg-paper text-ink antialiased">
+    <header class="border-b border-stone-200 bg-white/80 backdrop-blur">
+      <div class="mx-auto flex max-w-5xl flex-wrap items-center gap-3 px-4 py-3">
+        <a href="/" class="mr-2 text-lg font-bold tracking-tight">共创 Wiki</a>
+        <a href="/" class="text-sm text-stone-600 hover:text-ink">全部页面</a>
+        <a href="/edit?path=content/new-page.md" class="text-sm text-stone-600 hover:text-ink">新建页面</a>
+
+        <div class="ml-auto flex items-center gap-2 text-xs text-stone-500">
+          <span>M1 本地演示 · 当前身份</span>
+          <div class="flex overflow-hidden rounded-md border border-stone-300">
+            {
+              (roles).map((role) => (
+                <button
+                  type="button"
+                  data-role={role}
+                  class:list={[
+                    "px-2 py-1 transition-colors",
+                    activeRole === role ? "bg-ink text-white" : "bg-white text-stone-600 hover:bg-stone-100",
+                  ]}
+                  title={`切换到 ${MOCK_USERS[role].name}（${role}）`}
+                >
+                  {MOCK_USERS[role].name}
+                </button>
+              ))
+            }
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="mx-auto max-w-5xl px-4 py-8">
+      <slot />
+    </main>
+
+    <footer class="mx-auto max-w-5xl px-4 pb-10 pt-4 text-xs text-stone-400">
+      工部 M1 骨架 · 数据存于本地 ./data · 未接 GitHub / EdgeOne
+    </footer>
+
+    <script is:inline>
+      document.querySelectorAll("[data-role]").forEach(function (el) {
+        el.addEventListener("click", function () {
+          document.cookie = "mock_role=" + el.dataset.role + "; path=/; max-age=604800; SameSite=Lax";
+          location.reload();
+        });
+      });
+    </script>
+  </body>
+</html>
