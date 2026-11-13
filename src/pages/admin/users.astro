@@ -7,10 +7,10 @@ export const prerender = false;
 
 const session = getSession(Astro.cookies);
 if (!session) {
-  return Astro.redirect(`/login?next=${encodeURIComponent("/admin/users")}`);
+  return Astro.redirect("/admin/login");
 }
 if (session.role !== "admin") {
-  return Astro.redirect("/");
+  return Astro.redirect("/admin");
 }
 
 const users = await getUserRepository().load();
