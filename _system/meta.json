@@ -20,6 +20,16 @@
       ],
       "updatedAt": "2026-11-13T09:23:39.075Z",
       "updatedBy": "admin"
+    },
+    "content/_apitest.md": {
+      "title": "接口自检",
+      "order": 100,
+      "acl": [
+        "admin",
+        "editor"
+      ],
+      "updatedAt": "2026-11-13T09:59:05.336Z",
+      "updatedBy": "admin"
     }
   }
 }
