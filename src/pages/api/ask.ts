@@ -1,7 +1,7 @@
 import type { APIRoute } from "astro";
 import { chat, type ChatMessage } from "../../lib/ai";
 import { pathToSlug } from "../../lib/ids";
-import { searchPages } from "../../lib/search";
+import { retrievePages } from "../../lib/search";
 import { getSession } from "../../lib/session";
 import { getStore } from "../../lib/storage";
 
@@ -50,7 +50,6 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   }
 
   const store = getStore();
-  const hits = await searchPages(store, question, 4);
 
   // 当前页优先入上下文
   const contexts: { path: string; title: string; slug: string; markdown: string }[] = [];
@@ -63,17 +62,15 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       seen.add(current.path);
     }
   }
-  for (const hit of hits) {
-    if (seen.has(hit.path)) continue;
-    const record = await store.getPageByPath(hit.path).catch(() => null);
-    if (!record) continue;
-    contexts.push({ path: record.path, title: record.title, slug: hit.slug, markdown: record.markdown });
-    seen.add(hit.path);
+  for (const item of await retrievePages(store, question, 3)) {
+    if (seen.has(item.path)) continue;
+    contexts.push(item);
+    seen.add(item.path);
     if (contexts.length >= 3) break;
   }
 
   if (contexts.length === 0) {
-    return json({ ok: true, answer: "站内没有找到相关内容，换个关键词试试，或者先写一页。", sources: [] });
+    return json({ ok: true, answer: "站内还没有内容，先写一页再来问。", sources: [] });
   }
 
   const contextText = contexts

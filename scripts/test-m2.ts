@@ -559,6 +559,12 @@ async function testManage(): Promise<void> {
   ok("搜索命中标题", byTitle.length === 1 && byTitle[0]?.path === "content/index.md");
   const byBody = await searchPages(store, "欢迎");
   ok("搜索命中正文", byBody.length === 1);
+  const { retrievePages } = await import("../src/lib/search");
+  const retrieved = await retrievePages(store, "怎么登录并编辑", 2);
+  ok("问答检索能按语义片段命中", retrieved.some((item) => item.path === "content/guide/intro.md" || item.path === "content/index.md"));
+  const fallback = await retrievePages(store, "完全无关的问题xyz", 2);
+  ok("检索无命中时退回站内页面", fallback.length > 0);
+
   const none = await searchPages(store, "不存在的词");
   ok("无匹配返回空", none.length === 0);
 }
