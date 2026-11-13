@@ -12,7 +12,8 @@ export function setPageCache(
 ): void {
   const session = getSession(cookies);
   if (session) {
-    headers.set("Cache-Control", "private, no-store");
+    // 登录用户的页面只有他自己能看，交给浏览器私有缓存，站内跳转不必每次重新渲染。
+    headers.set("Cache-Control", "private, max-age=15");
     return;
   }
   const maxAge = options.maxAge ?? 180;

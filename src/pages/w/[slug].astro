@@ -23,7 +23,7 @@ if (!page) {
 const etag = `"${page.sha}"`;
 const loggedIn = Boolean(getSession(Astro.cookies));
 const cacheControl = loggedIn
-  ? "private, no-store"
+  ? "private, max-age=15"
   : "public, max-age=30, s-maxage=120, stale-while-revalidate=1800";
 const headers = new Headers({ "Cache-Control": cacheControl, ETag: etag });
 
