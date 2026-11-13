@@ -113,13 +113,15 @@ ACL 默认 `["admin","editor"]`；M2 接真实邀请码 / PBKDF2 / JWT（模块 
 5. **U3（Blob SDK 在 Astro/Node 运行时可用性）未实测**：M1 无 EdgeOne 账号与 Blob 凭据，只确认 `@edgeone/astro` 构建可过；M2 起手做最小 probe。
 6. **U1/U2/U4**（免费额度、按 URL 刷缓存 API、备案周期）需控制台/文档核实，M1 不承诺。
 7. **图片 private 分支未实现**：按约定只留类型、配置与 501 响应，M2 接 GitHub 只读 token 后补代理；仓库转私有时不能只改 `IMAGE_MODE`，还需补该分支。
-8. M1 未做：真实鉴权、GitHub 单 commit、Blob 镜像、图片入库、部署、账号。
+8. **`/uploads` 是 M1 本地过渡路由**：M2 图片读路径统一迁到 `/img/` 后删除；该路由已去掉 `.svg` 映射，白名单外文件按附件下载并带 `nosniff` + CSP `sandbox`。
+9. **M2 模块 G 并发**：按 v2 §2.7 在 `savePage` 内部处理 422 重试（重取 ref → 新 head 作 base_tree → 只覆盖本次 path → 最多 3 次；比对目标 blob sha 决定成功或 conflict），M1 仅在代码注释中标注，未提前实现。
+10. M1 未做：真实鉴权、GitHub 单 commit、Blob 镜像、图片入库、部署、账号。
 
 ## 安全边界
 
 - 读路径 `markdown-it({ html:false })`：正文中的 HTML 当文本转义，不执行；自测覆盖 `<script>` 与 `onerror`。
 - 保存接口校验：必填字段、baseSha 类型、图片 MIME 白名单、单图 ≤800KB、路径不得穿越。
-- `/uploads` 读接口限制在 `data/uploads/` 内，拒绝 `..`。
+- `/uploads` 读接口限制在 `data/uploads/` 内，拒绝 `..`；只按位图 MIME 返回，`.svg` 等白名单外文件强制 `Content-Disposition: attachment`，并统一加 `X-Content-Type-Options: nosniff` 与 `Content-Security-Policy: default-src 'none'; sandbox`。
 
 ## 目录结构
 
