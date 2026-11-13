@@ -286,7 +286,7 @@ export default function Editor({ initial, user, history }: Props) {
     <div>
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <div className="min-w-0 flex-1">
-          <label className="mb-1 block text-xs text-stone-500" htmlFor="page-title">
+          <label className="label mb-1 block" htmlFor="page-title">
             页面标题
           </label>
           <input
@@ -297,7 +297,7 @@ export default function Editor({ initial, user, history }: Props) {
               setTitle((event.target as HTMLInputElement).value);
               setDirty(true);
             }}
-            className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-lg font-semibold outline-none focus:border-stone-500 disabled:bg-stone-100"
+            className="w-full border-0 border-b border-hairline bg-transparent px-0 py-2 text-[1.9rem] font-light leading-tight tracking-tight text-ink outline-none focus:border-ink disabled:text-stone-400"
             placeholder="页面标题"
           />
           <div className="mt-1 truncate text-xs text-stone-400">
@@ -308,7 +308,7 @@ export default function Editor({ initial, user, history }: Props) {
         <div className="flex items-center gap-2">
           <a
             href={`/w/${slugOf(initial.path)}`}
-            className="rounded-md border border-stone-300 px-3 py-1.5 text-sm hover:bg-stone-100"
+            className="border border-hairline px-3 py-1.5 text-[12px] uppercase tracking-label text-graphite transition-colors hover:border-ink hover:text-ink"
           >
             阅读页
           </a>
@@ -316,7 +316,7 @@ export default function Editor({ initial, user, history }: Props) {
             type="button"
             onClick={save}
             disabled={saving || readOnly || pendingImages > 0}
-            className="rounded-md bg-ink px-4 py-1.5 text-sm text-white hover:bg-black disabled:cursor-not-allowed disabled:opacity-50"
+            className="border border-ink bg-ink px-4 py-1.5 text-[12px] uppercase tracking-label text-paper transition-colors hover:bg-paper hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
           >
             {saving ? "保存中…" : "保存"}
           </button>
@@ -344,15 +344,15 @@ export default function Editor({ initial, user, history }: Props) {
         </div>
       )}
 
-      <div className="tiptap-shell rounded-lg border border-stone-300 bg-white shadow-sm">
+      <div className="tiptap-shell border border-hairline bg-white">
         <Toolbar editor={editor} disabled={readOnly} onPickImage={onPickImage} />
         <EditorContent editor={editor} />
       </div>
 
       <input ref={fileInputRef} type="file" accept="image/*" multiple hidden onChange={onFileChange} />
 
-      <section className="mt-6 rounded-lg border border-stone-200 bg-white p-4">
-        <h2 className="mb-2 text-sm font-semibold text-stone-700">版本历史（最近 {history.length} 条）</h2>
+      <section className="mt-10 border-t border-hairline pt-6">
+        <h2 className="label mb-3 block">版本历史（最近 {history.length} 条）</h2>
         {history.length === 0 ? (
           <p className="text-xs text-stone-400">暂无保存记录。</p>
         ) : (
@@ -367,7 +367,7 @@ export default function Editor({ initial, user, history }: Props) {
                   type="button"
                   disabled={saving}
                   onClick={() => revertTo(item.sha)}
-                  className="rounded border border-stone-300 px-1.5 py-0.5 text-[11px] text-stone-600 hover:bg-stone-100 disabled:opacity-50"
+                  className="border border-hairline px-1.5 py-0.5 text-[11px] text-graphite transition-colors hover:border-ink hover:text-ink disabled:opacity-40"
                 >
                   恢复此版本
                 </button>

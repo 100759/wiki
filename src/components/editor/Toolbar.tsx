@@ -57,7 +57,7 @@ export default function Toolbar({ editor, disabled, onPickImage }: Props) {
   });
 
   if (!editor) {
-    return <div className="h-11 rounded-t-lg border-b border-stone-200 bg-stone-50" />;
+    return <div className="h-11 border-b border-hairline bg-mist" />;
   }
 
   const chain = () => editor.chain().focus();
@@ -74,7 +74,7 @@ export default function Toolbar({ editor, disabled, onPickImage }: Props) {
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-0.5 rounded-t-lg border-b border-stone-200 bg-stone-50 px-2 py-1.5">
+    <div className="flex flex-wrap items-center gap-0.5 border-b border-hairline bg-mist px-2 py-1.5">
       <Btn label="H1" active={state.h1} disabled={disabled} onClick={() => chain().toggleHeading({ level: 1 }).run()} />
       <Btn label="H2" active={state.h2} disabled={disabled} onClick={() => chain().toggleHeading({ level: 2 }).run()} />
       <Btn label="H3" active={state.h3} disabled={disabled} onClick={() => chain().toggleHeading({ level: 3 }).run()} />
