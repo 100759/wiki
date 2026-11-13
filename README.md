@@ -66,14 +66,14 @@ edgeone makers deploy -n wiki -t $EDGEONE_API_TOKEN --site china
 - `--site china`：hchina 站、global 区域（按丞相首次部署口径记录）。
 - API Token 只在执行部署的本机环境变量里，**不写进仓库、不打印**。
 - 首次部署暴露的读路径问题已修：EdgeOne 运行时的 `/var/user` 不可写，`localFileStore` 现会降级为只读并用构建期打包的 `content/` 渲染；保存接口返回可读失败原因，不再 500。
-- 部署后自测探针：`curl https://<域名>/api/_probe`（见下节）。
+- 部署后自测探针：`curl -H "x: 1" "https://<域名>/api/_probe?token=$PROBE_TOKEN"`（需先设 `PROBE_TOKEN`，见下节）。
 
 ## 只读部署兜底与打包内容
 
 - 数据目录（默认 `./data`，或 `WIKI_DATA_DIR`）**不可写时**：不抛错，自动进入只读模式；`listPages()` 返回空列表、`getPageByPath()` 返回 null、`savePage()` 返回 `{ ok:false, code:"invalid" }`，页面路由正常渲染 404/首页。
 - 仓库根目录新增 `content/`（`index.md`、`about.md`、`guide/start.md`），构建时由 `import.meta.glob` 以 `?raw` 打进服务端产物；线上首屏优先读这份快照。磁盘 `data/content` 存在同路径时以磁盘为准。
 - 本地复现只读部署：把 `WIKI_DATA_DIR` 指到不可写目录（如 `chmod 0555` 的临时目录）后启动，首页与 `/w/index` 仍应 200。
-- `/api/_probe`：U3 实测，JSON 返回三步结果——能否 import `@edgeone/pages-blob`、能否 `getStore("wiki-probe")`、能否写读一个键（strong）。只返回能力结果，不读不打印凭据。本地非 Pages 运行时通常 import 通过、store 失败（`Missing: deployCredential`），属预期；以线上结果为准。注意 Astro 不把以 `_` 开头的页面文件当路由，实际处理器在 `src/pages/api/[...path].ts`，逻辑在 `src/lib/probe.ts`。
+- `/api/_probe`：默认 404；设了 `PROBE_TOKEN` 才开启，且必须带 `?token=`，只有再加 `&write=1` 才写读一个键（每次留一个 key）。U3 实测，JSON 返回三步结果——能否 import `@edgeone/pages-blob`、能否 `getStore("wiki-probe")`、能否写读一个键（strong）。只返回能力结果，不读不打印凭据。本地非 Pages 运行时通常 import 通过、store 失败（`Missing: deployCredential`），属预期；以线上结果为准。注意 Astro 不把以 `_` 开头的页面文件当路由，实际处理器在 `src/pages/api/[...path].ts`，逻辑在 `src/lib/probe.ts`。
 
 ## 实际安装版本（全部锁死，无 `^`）
 
